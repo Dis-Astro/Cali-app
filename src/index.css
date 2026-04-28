@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Design System - Palestra Calisthenics Premium Urban Style */
+
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 0 0% 4%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 4%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 38 92% 50%;
+
+    --radius: 0.25rem;
+
+    /* Custom tokens */
+    --hero-overlay: 0 0% 0%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+
+    /* Fonts */
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'Inter', sans-serif;
+
+    /* Sidebar tokens */
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 38 92% 50%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 38 92% 50%;
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 38 92% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+    overflow-x: hidden;
+  }
+
+  html, body, #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  * {
+    min-width: 0;
+  }
+
+  /* Prevent auto-zoom on mobile inputs */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  @media (min-width: 768px) {
+    input, select, textarea {
+      font-size: inherit !important;
+    }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: 0.05em;
+  }
+}
+
+@layer components {
+  .split-panel {
+    @apply relative flex items-center justify-center cursor-pointer transition-all duration-500 ease-out;
+    background: hsl(var(--hero-overlay) / 0.6);
+  }
+
+  .split-panel:hover {
+    background: hsl(var(--hero-overlay) / 0.4);
+  }
+
+  .split-panel:hover .split-title {
+    transform: scale(1.05);
+    text-shadow: 0 0 60px hsl(var(--primary) / 0.5);
+  }
+
+  .split-title {
+    @apply text-5xl md:text-7xl lg:text-8xl font-bold tracking-wider transition-all duration-500;
+    font-family: var(--font-display);
+    color: hsl(var(--foreground));
+  }
+
+  .split-divider {
+    @apply absolute bg-foreground/20;
+  }
+
+  .form-container {
+    @apply bg-card border border-border rounded-sm p-6 md:p-8;
+  }
+
+  .page-container {
+    @apply min-h-screen bg-background px-4 py-12 md:py-20;
+  }
+
+  .section-title {
+    @apply text-4xl md:text-5xl lg:text-6xl font-bold tracking-wider mb-6;
+    font-family: var(--font-display);
+  }
+
+  .whatsapp-button {
+    @apply inline-flex items-center gap-3 px-6 py-3 bg-[#25D366] text-white font-semibold rounded-sm transition-all duration-300 hover:bg-[#128C7E] hover:scale-105;
+  }
+}
