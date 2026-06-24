@@ -1,0 +1,28 @@
+name: power_gym_client
+description: Offline-first Flutter client app for Power Gym coaching customers.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  connectivity_plus: ^6.1.4
+  flutter_secure_storage: ^9.2.4
+  intl: ^0.20.2
+  path: ^1.9.1
+  provider: ^6.1.2
+  sqflite: ^2.4.2
+  supabase_flutter: ^2.15.0
+  url_launcher: ^6.3.1
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
