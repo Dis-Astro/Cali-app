@@ -67,4 +67,33 @@ class SyncService {
 
     return SyncResult(sent: sent, failed: failed);
   }
+
+  Future<SyncResult> syncPendingReports(String clientId) async {
+    final pending = await _localStore.pendingReports(clientId);
+    var sent = 0;
+    var failed = 0;
+
+    for (final report in pending) {
+      try {
+        final data = await _client
+            .from('error_reports')
+            .insert(report.toPayload())
+            .select('id')
+            .single();
+
+        // Remove stale local record and store with the remote id
+        await _localStore.deleteReport(report.id);
+        await _localStore.upsertPendingReport(report.copyWith(
+          id: data['id'] as String,
+          pendingSync: false,
+        ));
+
+        sent++;
+      } catch (error) {
+        failed++;
+      }
+    }
+
+    return SyncResult(sent: sent, failed: failed);
+  }
 }

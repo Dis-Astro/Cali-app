@@ -3,8 +3,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/date_formatters.dart';
 import '../../features/sync/sync_service.dart';
 import '../local/local_store.dart';
+import '../models/appointment_model.dart';
+import '../models/client_document_model.dart';
 import '../models/coach_test_note_model.dart';
+import '../models/error_report_model.dart';
 import '../models/exercise_video_model.dart';
+import '../models/subscription_model.dart';
 import '../models/workout_completion_model.dart';
 import '../models/workout_exercise_model.dart';
 import '../models/workout_plan_model.dart';
@@ -24,6 +28,7 @@ class WorkoutRepository {
 
   Future<void> refreshFromRemote(String userId) async {
     await _syncService.syncPendingCompletions(userId);
+    await _syncService.syncPendingReports(userId);
 
     final planRows = await _client
         .from('workout_plans')
@@ -107,6 +112,77 @@ class WorkoutRepository {
       } catch (_) {
         // Older RLS policies may hide these notes; keep the rest of the app usable.
       }
+    }
+
+    // Sync appointments
+    try {
+      final appointmentRows = await _client
+          .from('appointments')
+          .select()
+          .eq('client_id', userId)
+          .order('start_time', ascending: true) as List<dynamic>;
+      await _localStore.cacheAppointments(
+        appointmentRows
+            .cast<Map<String, dynamic>>()
+            .map(AppointmentModel.fromJson)
+            .toList(),
+      );
+    } catch (_) {
+      // Appointments are optional
+    }
+
+    // Sync documents
+    try {
+      final documentRows = await _client
+          .from('client_documents')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false) as List<dynamic>;
+      await _localStore.cacheDocuments(
+        documentRows
+            .cast<Map<String, dynamic>>()
+            .map(ClientDocumentModel.fromJson)
+            .toList(),
+      );
+    } catch (_) {
+      // Documents are optional
+    }
+
+    // Sync error reports
+    try {
+      final reportRows = await _client
+          .from('error_reports')
+          .select()
+          .eq('client_id', userId)
+          .order('reported_at', ascending: false) as List<dynamic>;
+      await _localStore.cacheReports(
+        reportRows
+            .cast<Map<String, dynamic>>()
+            .map(ErrorReportModel.fromJson)
+            .toList(),
+      );
+    } catch (_) {
+      // Error reports are optional
+    }
+
+    // Sync subscription
+    try {
+      final subRows = await _client
+          .from('subscriptions')
+          .select('*, plan:membership_plans(name)')
+          .eq('user_id', userId)
+          .eq('status', 'attivo')
+          .order('end_date', ascending: false)
+          .limit(1) as List<dynamic>;
+      if (subRows.isNotEmpty) {
+        await _localStore.cacheSubscription(
+          SubscriptionModel.fromJson(
+            subRows.first as Map<String, dynamic>,
+          ),
+        );
+      }
+    } catch (_) {
+      // Subscription is optional
     }
 
     await _localStore.setMeta(
@@ -266,6 +342,166 @@ class WorkoutRepository {
   Future<int> pendingCount(String clientId) {
     return _localStore.pendingCount(clientId);
   }
+
+  Future<int> pendingReportCount(String clientId) {
+    return _localStore.pendingReportCount(clientId);
+  }
+
+  Future<WeeklyProgressSummary> weeklyProgress({
+    required String planId,
+    required String clientId,
+  }) async {
+    final plan = await _localStore.planById(planId);
+    if (plan == null) return const WeeklyProgressSummary.empty();
+
+    final exercises = await _localStore.exercisesForPlan(planId);
+    if (exercises.isEmpty) {
+      return const WeeklyProgressSummary.empty();
+    }
+
+    var weekNumber = 1;
+    try {
+      weekNumber = currentWeek(plan.startDate, plan.endDate);
+    } catch (_) {
+      weekNumber = 1;
+    }
+
+    final exerciseIds = exercises.map((exercise) => exercise.id).toList();
+    final completions = await _localStore.completionsForExercises(
+      clientId: clientId,
+      exerciseIds: exerciseIds,
+    );
+    final completedExerciseIds = completions
+        .where((completion) =>
+            completion.setNumber == weekNumber &&
+            ((completion.clientNotes?.trim().isNotEmpty ?? false) ||
+                (completion.difficultyRating ?? 0) > 0 ||
+                completion.saved ||
+                completion.pendingSync))
+        .map((completion) => completion.workoutPlanExerciseId)
+        .toSet();
+
+    return WeeklyProgressSummary(
+      weekNumber: weekNumber,
+      completedCount: completedExerciseIds.length,
+      exerciseCount: exercises.length,
+    );
+  }
+
+  Future<ProgressStats> progressStats(String clientId) async {
+    final plans = await _localStore.plansForUser(clientId);
+    final exerciseIds = <String>{};
+
+    for (final plan in plans.where((plan) => !plan.isDeleted)) {
+      final exercises = await _localStore.exercisesForPlan(plan.id);
+      exerciseIds.addAll(exercises.map((exercise) => exercise.id));
+    }
+
+    if (exerciseIds.isEmpty) return const ProgressStats.empty();
+
+    final completions = await _localStore.completionsForExercises(
+      clientId: clientId,
+      exerciseIds: exerciseIds.toList(),
+    );
+    final meaningfulCompletions = completions.where((completion) {
+      return (completion.clientNotes?.trim().isNotEmpty ?? false) ||
+          (completion.difficultyRating ?? 0) > 0 ||
+          completion.saved ||
+          completion.pendingSync;
+    }).toList();
+
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final last7Days = List.generate(
+      7,
+      (index) => todayOnly.subtract(Duration(days: 6 - index)),
+    );
+    final dailyCounts = List.filled(7, 0);
+    final activeDateKeys = <String>{};
+    final ratings = <int>[];
+
+    for (final completion in meaningfulCompletions) {
+      final completedAt = DateTime.tryParse(completion.completedAt);
+      if (completedAt == null) continue;
+
+      final completedDay = DateTime(
+        completedAt.year,
+        completedAt.month,
+        completedAt.day,
+      );
+      activeDateKeys.add(_dateKey(completedDay));
+
+      final dayIndex = last7Days.indexWhere(
+        (day) => _dateKey(day) == _dateKey(completedDay),
+      );
+      if (dayIndex != -1) dailyCounts[dayIndex]++;
+
+      final rating = completion.difficultyRating;
+      if (rating != null && rating > 0) ratings.add(rating);
+    }
+
+    var streak = 0;
+    var cursor = todayOnly;
+    while (activeDateKeys.contains(_dateKey(cursor))) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    final averageDifficulty = ratings.isEmpty
+        ? 0
+        : (ratings.reduce((a, b) => a + b) / ratings.length).round();
+
+    return ProgressStats(
+      activeDayStreak: streak,
+      completionCount: meaningfulCompletions.length,
+      activeDaysLast7: dailyCounts.where((count) => count > 0).length,
+      averageDifficulty: averageDifficulty,
+      dailyCompletionCounts: dailyCounts,
+    );
+  }
+
+  String _dateKey(DateTime date) {
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
+  // --- Appointments ---
+
+  Future<List<AppointmentModel>> localAppointments(String userId) {
+    return _localStore.appointmentsForUser(userId);
+  }
+
+  Future<List<AppointmentModel>> localUpcomingAppointments(String userId) {
+    return _localStore.upcomingAppointments(userId);
+  }
+
+  Future<List<AppointmentModel>> localPastAppointments(String userId) {
+    return _localStore.pastAppointments(userId);
+  }
+
+  // --- Documents ---
+
+  Future<List<ClientDocumentModel>> localDocuments(String userId) {
+    return _localStore.documentsForUser(userId);
+  }
+
+  // --- Error Reports ---
+
+  Future<List<ErrorReportModel>> localReports(String userId) {
+    return _localStore.reportsForUser(userId);
+  }
+
+  Future<void> saveReport(ErrorReportModel report) {
+    return _localStore.upsertPendingReport(report);
+  }
+
+  // --- Subscriptions ---
+
+  Future<SubscriptionModel?> localSubscription(String userId) {
+    return _localStore.subscriptionForUser(userId);
+  }
 }
 
 class WorkoutDaySummary {
@@ -285,6 +521,51 @@ class WorkoutDaySummary {
   }
 
   bool get isComplete => exerciseCount > 0 && completedCount >= exerciseCount;
+}
+
+class WeeklyProgressSummary {
+  const WeeklyProgressSummary({
+    required this.weekNumber,
+    required this.completedCount,
+    required this.exerciseCount,
+  });
+
+  const WeeklyProgressSummary.empty()
+      : weekNumber = 1,
+        completedCount = 0,
+        exerciseCount = 0;
+
+  final int weekNumber;
+  final int completedCount;
+  final int exerciseCount;
+
+  int get progress {
+    if (exerciseCount == 0) return 0;
+    return ((completedCount / exerciseCount) * 100).round();
+  }
+}
+
+class ProgressStats {
+  const ProgressStats({
+    required this.activeDayStreak,
+    required this.completionCount,
+    required this.activeDaysLast7,
+    required this.averageDifficulty,
+    required this.dailyCompletionCounts,
+  });
+
+  const ProgressStats.empty()
+      : activeDayStreak = 0,
+        completionCount = 0,
+        activeDaysLast7 = 0,
+        averageDifficulty = 0,
+        dailyCompletionCounts = const [0, 0, 0, 0, 0, 0, 0];
+
+  final int activeDayStreak;
+  final int completionCount;
+  final int activeDaysLast7;
+  final int averageDifficulty;
+  final List<int> dailyCompletionCounts;
 }
 
 class DayDetailData {

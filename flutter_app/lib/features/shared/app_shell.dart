@@ -3,9 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/widgets/sync_status_pill.dart';
 import '../../data/models/profile_model.dart';
+import '../appointments/appointments_screen.dart';
 import '../archive/archive_screen.dart';
 import '../auth/auth_controller.dart';
+import '../documents/documents_screen.dart';
 import '../home/home_screen.dart';
+import '../progress/progress_screen.dart';
+import '../reports/report_issue_screen.dart';
 import '../workout/workout_controller.dart';
 import '../workout/workout_days_screen.dart';
 
@@ -25,7 +29,15 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   bool _started = false;
 
-  static const _titles = ['LA TUA GIORNATA', 'LA MIA SCHEDA', 'ARCHIVIO'];
+  static const _titles = [
+    'LA TUA GIORNATA',
+    'LA MIA SCHEDA',
+    'ARCHIVIO',
+    'APPUNTAMENTI',
+    'DOCUMENTI',
+    'SEGNALAZIONI',
+    'PROGRESSI',
+  ];
 
   @override
   void didChangeDependencies() {
@@ -44,10 +56,14 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
+    final pages = <Widget>[
       HomeScreen(onOpenWorkout: () => setState(() => _index = 1)),
       const WorkoutDaysScreen(),
       const ArchiveScreen(),
+      const AppointmentsScreen(),
+      const DocumentsScreen(),
+      const ReportIssueScreen(),
+      const ProgressScreen(),
     ];
 
     return Scaffold(
@@ -77,6 +93,7 @@ class _AppShellState extends State<AppShell> {
       ),
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
         currentIndex: _index,
         onTap: (value) => setState(() => _index = value),
         items: const [
@@ -94,6 +111,26 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.archive_outlined),
             activeIcon: Icon(Icons.archive),
             label: 'Archivio',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.event_outlined),
+            activeIcon: Icon(Icons.event),
+            label: 'App.',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.description_outlined),
+            activeIcon: Icon(Icons.description),
+            label: 'Doc.',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.report_outlined),
+            activeIcon: Icon(Icons.report),
+            label: 'Aiuto',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
+            label: 'Prog.',
           ),
         ],
       ),

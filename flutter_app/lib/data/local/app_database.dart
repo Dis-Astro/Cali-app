@@ -14,14 +14,25 @@ class AppDatabase {
     final dbPath = await getDatabasesPath();
     final db = await openDatabase(
       path.join(dbPath, 'power_gym_client.db'),
-      version: 1,
+      version: 2,
       onCreate: _create,
+      onUpgrade: _upgrade,
     );
     _database = db;
     return db;
   }
 
   Future<void> _create(Database db, int version) async {
+    await _createAll(db);
+  }
+
+  Future<void> _upgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createV2Tables(db);
+    }
+  }
+
+  Future<void> _createAll(Database db) async {
     await db.execute('''
       CREATE TABLE profiles (
         id TEXT NOT NULL,
@@ -123,6 +134,8 @@ class AppDatabase {
       )
     ''');
 
+    await _createV2Tables(db);
+
     await db.execute(
       'CREATE INDEX idx_plans_client ON workout_plans(client_id, end_date)',
     );
@@ -131,6 +144,82 @@ class AppDatabase {
     );
     await db.execute(
       'CREATE INDEX idx_completions_client ON workout_completions(client_id, pending_sync)',
+    );
+  }
+
+  Future<void> _createV2Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS appointments (
+        id TEXT PRIMARY KEY,
+        client_id TEXT,
+        coach_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        location TEXT,
+        color TEXT,
+        is_recurring INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS client_documents (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        file_url TEXT NOT NULL,
+        file_type TEXT,
+        file_size INTEGER,
+        created_at TEXT,
+        uploaded_by TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS error_reports (
+        id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        coach_id TEXT NOT NULL,
+        description TEXT NOT NULL,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'aperta',
+        exercise_id TEXT,
+        workout_plan_id TEXT,
+        reported_at TEXT,
+        resolved_at TEXT,
+        coach_response TEXT,
+        pending_sync INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        plan_id TEXT,
+        plan_name TEXT,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_appointments_client ON appointments(client_id, start_time)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_documents_user ON client_documents(user_id, created_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reports_client ON error_reports(client_id, status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id, status)',
     );
   }
 }

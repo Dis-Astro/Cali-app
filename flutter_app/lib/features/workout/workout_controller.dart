@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../data/models/appointment_model.dart';
+import '../../data/models/client_document_model.dart';
+import '../../data/models/error_report_model.dart';
+import '../../data/models/subscription_model.dart';
 import '../../data/models/workout_plan_model.dart';
 import '../../data/repositories/workout_repository.dart';
 import '../sync/sync_state.dart';
@@ -18,13 +22,34 @@ class WorkoutController extends ChangeNotifier {
   String? error;
   SyncState syncState = SyncState.idle;
   int pendingCount = 0;
+  int pendingCompletionsCount = 0;
+  int pendingReportsCount = 0;
+  int weeklyProgressWeek = 1;
+  int weeklyCompletedExercises = 0;
+  int weeklyTotalExercises = 0;
+  int weeklyProgressPercent = 0;
+  int activeDayStreak = 0;
+  int completionCount = 0;
+  int activeDaysLast7 = 0;
+  int averageDifficulty = 0;
+  List<int> dailyCompletionCounts = const [0, 0, 0, 0, 0, 0, 0];
   List<WorkoutPlanModel> plans = const [];
   WorkoutPlanModel? activePlan;
+  List<AppointmentModel> appointments = const [];
+  List<ClientDocumentModel> documents = const [];
+  List<ErrorReportModel> reports = const [];
+  SubscriptionModel? subscription;
 
   List<WorkoutPlanModel> get archivePlans {
     final activeId = activePlan?.id;
     return plans.where((plan) => plan.id != activeId).toList();
   }
+
+  List<AppointmentModel> get upcomingAppointments =>
+      appointments.where((a) => !a.isPast).toList();
+
+  List<AppointmentModel> get pastAppointments =>
+      appointments.where((a) => a.isPast).toList();
 
   Future<void> load(String userId, {bool refreshRemote = false}) async {
     _userId = userId;
@@ -48,7 +73,7 @@ class WorkoutController extends ChangeNotifier {
 
     if (!await _hasConnection()) {
       syncState = SyncState.offline;
-      pendingCount = await _repository.pendingCount(userId);
+      await _loadPendingCounts(userId);
       notifyListeners();
       return;
     }
@@ -101,7 +126,46 @@ class WorkoutController extends ChangeNotifier {
       rating: rating,
     );
 
-    pendingCount = await _repository.pendingCount(userId);
+    await _loadPendingCounts(userId);
+    await _loadWeeklyProgress(userId);
+    await _loadProgressStats(userId);
+    syncState = await _hasConnection() ? SyncState.idle : SyncState.offline;
+    notifyListeners();
+
+    if (syncState != SyncState.offline) {
+      await refresh();
+    }
+  }
+
+  Future<void> saveReport({
+    required String coachId,
+    required String title,
+    required String description,
+    String? exerciseId,
+    String? workoutPlanId,
+  }) async {
+    final userId = _userId;
+    if (userId == null) return;
+    if (coachId.trim().isEmpty) {
+      throw StateError('Coach non disponibile per questa segnalazione.');
+    }
+
+    final report = ErrorReportModel(
+      id: '',
+      clientId: userId,
+      coachId: coachId.trim(),
+      title: title.trim(),
+      description: description.trim(),
+      exerciseId: exerciseId,
+      workoutPlanId: workoutPlanId,
+      pendingSync: true,
+      reportedAt: DateTime.now().toIso8601String(),
+    );
+
+    await _repository.saveReport(report);
+
+    await _loadPendingCounts(userId);
+    reports = await _repository.localReports(userId);
     syncState = await _hasConnection() ? SyncState.idle : SyncState.offline;
     notifyListeners();
 
@@ -119,7 +183,7 @@ class WorkoutController extends ChangeNotifier {
         await refresh();
       } else {
         syncState = SyncState.offline;
-        pendingCount = await _repository.pendingCount(userId);
+        await _loadPendingCounts(userId);
         notifyListeners();
       }
     });
@@ -128,7 +192,48 @@ class WorkoutController extends ChangeNotifier {
   Future<void> _loadLocal(String userId) async {
     plans = await _repository.localPlans(userId);
     activePlan = _repository.displayPlan(plans);
-    pendingCount = await _repository.pendingCount(userId);
+    appointments = await _repository.localAppointments(userId);
+    documents = await _repository.localDocuments(userId);
+    reports = await _repository.localReports(userId);
+    subscription = await _repository.localSubscription(userId);
+    await _loadPendingCounts(userId);
+    await _loadWeeklyProgress(userId);
+    await _loadProgressStats(userId);
+  }
+
+  Future<void> _loadPendingCounts(String userId) async {
+    pendingCompletionsCount = await _repository.pendingCount(userId);
+    pendingReportsCount = await _repository.pendingReportCount(userId);
+    pendingCount = pendingCompletionsCount + pendingReportsCount;
+  }
+
+  Future<void> _loadWeeklyProgress(String userId) async {
+    final plan = activePlan;
+    if (plan == null) {
+      weeklyProgressWeek = 1;
+      weeklyCompletedExercises = 0;
+      weeklyTotalExercises = 0;
+      weeklyProgressPercent = 0;
+      return;
+    }
+
+    final progress = await _repository.weeklyProgress(
+      planId: plan.id,
+      clientId: userId,
+    );
+    weeklyProgressWeek = progress.weekNumber;
+    weeklyCompletedExercises = progress.completedCount;
+    weeklyTotalExercises = progress.exerciseCount;
+    weeklyProgressPercent = progress.progress;
+  }
+
+  Future<void> _loadProgressStats(String userId) async {
+    final stats = await _repository.progressStats(userId);
+    activeDayStreak = stats.activeDayStreak;
+    completionCount = stats.completionCount;
+    activeDaysLast7 = stats.activeDaysLast7;
+    averageDifficulty = stats.averageDifficulty;
+    dailyCompletionCounts = stats.dailyCompletionCounts;
   }
 
   Future<bool> _hasConnection() async {

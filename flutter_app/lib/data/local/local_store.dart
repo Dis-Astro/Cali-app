@@ -1,9 +1,13 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/appointment_model.dart';
+import '../models/client_document_model.dart';
 import '../models/coach_test_note_model.dart';
+import '../models/error_report_model.dart';
 import '../models/exercise_video_model.dart';
 import '../models/profile_model.dart';
+import '../models/subscription_model.dart';
 import '../models/workout_completion_model.dart';
 import '../models/workout_exercise_model.dart';
 import '../models/workout_plan_model.dart';
@@ -308,6 +312,182 @@ class LocalStore {
     );
     if (rows.isEmpty) return null;
     return rows.first['value'] as String?;
+  }
+
+  // --- Appointments ---
+
+  Future<void> cacheAppointments(List<AppointmentModel> appointments) async {
+    final db = await _db;
+    final batch = db.batch();
+    for (final apt in appointments) {
+      batch.insert(
+        'appointments',
+        apt.toDb(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<AppointmentModel>> appointmentsForUser(String userId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'appointments',
+      where: 'client_id = ?',
+      whereArgs: [userId],
+      orderBy: 'start_time ASC',
+    );
+    return rows.map(AppointmentModel.fromDb).toList();
+  }
+
+  Future<List<AppointmentModel>> upcomingAppointments(String userId) async {
+    final db = await _db;
+    final now = DateTime.now().toIso8601String();
+    final rows = await db.query(
+      'appointments',
+      where: 'client_id = ? AND start_time >= ?',
+      whereArgs: [userId, now],
+      orderBy: 'start_time ASC',
+    );
+    return rows.map(AppointmentModel.fromDb).toList();
+  }
+
+  Future<List<AppointmentModel>> pastAppointments(String userId) async {
+    final db = await _db;
+    final now = DateTime.now().toIso8601String();
+    final rows = await db.query(
+      'appointments',
+      where: 'client_id = ? AND start_time < ?',
+      whereArgs: [userId, now],
+      orderBy: 'start_time DESC',
+    );
+    return rows.map(AppointmentModel.fromDb).toList();
+  }
+
+  // --- Client Documents ---
+
+  Future<void> cacheDocuments(List<ClientDocumentModel> documents) async {
+    final db = await _db;
+    final batch = db.batch();
+    for (final doc in documents) {
+      batch.insert(
+        'client_documents',
+        doc.toDb(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<ClientDocumentModel>> documentsForUser(String userId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'client_documents',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(ClientDocumentModel.fromDb).toList();
+  }
+
+  // --- Error Reports ---
+
+  Future<void> cacheReports(List<ErrorReportModel> reports) async {
+    final db = await _db;
+    final batch = db.batch();
+    for (final report in reports) {
+      batch.insert(
+        'error_reports',
+        report.toDb(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<ErrorReportModel>> reportsForUser(String userId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'error_reports',
+      where: 'client_id = ?',
+      whereArgs: [userId],
+      orderBy: 'reported_at DESC',
+    );
+    return rows.map(ErrorReportModel.fromDb).toList();
+  }
+
+  Future<void> upsertPendingReport(ErrorReportModel report) async {
+    final db = await _db;
+    final storedReport =
+        report.id.trim().isEmpty ? report.copyWith(id: _uuid.v4()) : report;
+    await db.insert(
+      'error_reports',
+      storedReport.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<ErrorReportModel>> pendingReports(String clientId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'error_reports',
+      where: 'client_id = ? AND pending_sync = 1',
+      whereArgs: [clientId],
+      orderBy: 'reported_at ASC',
+    );
+    return rows.map(ErrorReportModel.fromDb).toList();
+  }
+
+  Future<void> markReportSynced(String reportId) async {
+    final db = await _db;
+    await db.update(
+      'error_reports',
+      {'pending_sync': 0},
+      where: 'id = ?',
+      whereArgs: [reportId],
+    );
+  }
+
+  Future<void> deleteReport(String reportId) async {
+    final db = await _db;
+    await db.delete(
+      'error_reports',
+      where: 'id = ?',
+      whereArgs: [reportId],
+    );
+  }
+
+  // --- Subscriptions ---
+
+  Future<void> cacheSubscription(SubscriptionModel subscription) async {
+    final db = await _db;
+    await db.insert(
+      'subscriptions',
+      subscription.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<SubscriptionModel?> subscriptionForUser(String userId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'subscriptions',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'end_date DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return SubscriptionModel.fromDb(rows.first);
+  }
+
+  Future<int> pendingReportCount(String clientId) async {
+    final db = await _db;
+    final result = Sqflite.firstIntValue(await db.rawQuery(
+      'SELECT COUNT(*) FROM error_reports WHERE client_id = ? AND pending_sync = 1',
+      [clientId],
+    ));
+    return result ?? 0;
   }
 
   Future<WorkoutCompletionModel?> _completionByUnique(
