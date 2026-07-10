@@ -1,135 +1,131 @@
-import { useState } from "react";
+import { ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { 
-  Dumbbell, 
-  Calendar, 
-  TrendingUp,
-  Play,
+import {
+  Calendar,
+  Dumbbell,
   FileText,
-  
   LogOut,
-  Menu,
-  X,
-  Flame,
+  MessageSquare,
   Target,
-  ChevronRight,
-  Star,
-  User
+  TrendingUp,
+  User,
+  Zap,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 interface ClientLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
   title: string;
 }
+
+const primaryNavigation = [
+  { icon: Target, label: "Home", href: "/coaching" },
+  { icon: Dumbbell, label: "Scheda", href: "/coaching/scheda" },
+  { icon: Calendar, label: "Agenda", href: "/coaching/appuntamenti" },
+  { icon: TrendingUp, label: "Progressi", href: "/coaching/progressi" },
+];
+
+const secondaryNavigation = [
+  { icon: FileText, label: "Documenti", href: "/coaching/documenti" },
+  { icon: MessageSquare, label: "Segnala problema", href: "/coaching/segnala" },
+];
 
 const ClientLayout = ({ children, title }: ClientLayoutProps) => {
   const { profile, signOut } = useAuth();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const navigationItems = [
-    { icon: Target, label: "Dashboard", href: "/coaching" },
-    { icon: Dumbbell, label: "La Mia Scheda", href: "/coaching/scheda" },
-    { icon: TrendingUp, label: "I Miei Progressi", href: "/coaching/progressi" },
-    { icon: Calendar, label: "Appuntamenti", href: "/coaching/appuntamenti" },
-    
-    { icon: FileText, label: "Documenti", href: "/coaching/documenti" },
-  ];
+  const isActive = (href: string) =>
+    location.pathname === href || (href !== "/coaching" && location.pathname.startsWith(`${href}/`));
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Premium Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 
-        bg-gradient-to-b from-sidebar-background via-sidebar-background to-card
-        border-r border-sidebar-border
-        transform transition-transform duration-300 lg:translate-x-0 lg:static
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="flex flex-col h-full">
-          <div className="h-20 flex items-center px-6 border-b border-sidebar-border">
-            <Link to="/coaching" className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
-                <Flame className="w-7 h-7 text-primary-foreground" />
+    <div className="min-h-[100dvh] bg-background text-foreground lg:flex">
+      <aside className="hidden min-h-screen w-72 flex-col border-r border-border bg-card/70 lg:flex">
+        <div className="flex h-20 items-center gap-3 border-b border-border px-6">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary">
+            <Zap className="h-6 w-6 fill-current text-primary-foreground" />
+          </div>
+          <div>
+            <p className="font-display text-xl tracking-wider">SUPER POWER GYM</p>
+            <p className="text-xs text-primary">Coaching</p>
+          </div>
+        </div>
+
+        <div className="px-4 py-5">
+          <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-primary">
+                <User className="h-5 w-5" />
               </div>
               <div>
-                <span className="font-display text-2xl tracking-wider text-sidebar-foreground block">COACHING</span>
-                <span className="text-xs text-primary font-medium tracking-widest">PREMIUM</span>
-              </div>
-            </Link>
-            <button onClick={() => setSidebarOpen(false)} className="ml-auto lg:hidden text-sidebar-foreground">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* User Card */}
-          <div className="p-4">
-            <div className="bg-gradient-to-r from-primary/10 to-transparent rounded-lg p-4 border border-primary/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                  <span className="font-display text-xl text-primary">
-                    {profile?.first_name?.[0]}{profile?.last_name?.[0]}
-                  </span>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{profile?.first_name} {profile?.last_name}</p>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-primary fill-primary" />
-                    <span className="text-xs text-primary">Cliente Premium</span>
-                  </div>
-                </div>
+                <p className="font-medium">{profile?.first_name} {profile?.last_name}</p>
+                <p className="text-xs text-muted-foreground">Cliente coaching</p>
               </div>
             </div>
           </div>
+        </div>
 
-          <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-            {navigationItems.map((item) => {
-              const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
-              return (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  className={`flex items-center gap-3 px-4 py-3.5 rounded-lg transition-all duration-200 ${
-                    isActive 
-                      ? 'bg-gradient-to-r from-primary/20 to-primary/5 text-primary border-l-2 border-primary' 
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                  {isActive && <ChevronRight className="w-4 h-4 ml-auto" />}
-                </Link>
-              );
-            })}
-          </nav>
+        <nav className="flex-1 space-y-1 px-3">
+          {[...primaryNavigation, ...secondaryNavigation].map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+                isActive(item.href)
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="font-medium">{item.label}</span>
+            </Link>
+          ))}
+        </nav>
 
-          <div className="p-4 border-t border-sidebar-border">
-            <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive" onClick={signOut}>
-              <LogOut className="w-5 h-5" />Esci
-            </Button>
-          </div>
+        <div className="border-t border-border p-4">
+          <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive" onClick={signOut}>
+            <LogOut className="h-5 w-5" />
+            Esci
+          </Button>
         </div>
       </aside>
 
-      {sidebarOpen && <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-
-      <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-        <header className="h-16 bg-gradient-to-r from-card to-background border-b border-border flex items-center px-6">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-foreground mr-4">
-            <Menu className="w-6 h-6" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <h1 className="font-display text-xl tracking-wider">{title}</h1>
+      <div className="flex min-h-[100dvh] flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/85 px-4 backdrop-blur-xl native-safe-top">
+          <div className="mx-auto flex h-16 max-w-5xl items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Super Power Gym</p>
+              <h1 className="font-display text-xl tracking-wide">{title}</h1>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary lg:hidden">
+              <span className="font-display text-base">
+                {profile?.first_name?.[0]}{profile?.last_name?.[0]}
+              </span>
+            </div>
           </div>
         </header>
 
-        <div className="flex-1 p-4 md:p-6">
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-28 md:px-6 lg:pb-8">
           {children}
-        </div>
-      </main>
+        </main>
+
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-2 pb-[max(0.5rem,var(--safe-bottom))] pt-2 backdrop-blur-xl lg:hidden">
+          <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+            {primaryNavigation.map((item) => (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition ${
+                  isActive(item.href) ? "bg-primary/12 text-primary" : "text-muted-foreground"
+                }`}
+              >
+                <item.icon className={`h-5 w-5 ${isActive(item.href) ? "stroke-[2.5]" : ""}`} />
+                <span>{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+      </div>
     </div>
   );
 };
