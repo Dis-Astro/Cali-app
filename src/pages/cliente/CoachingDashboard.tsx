@@ -1,35 +1,29 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { format, parseISO, differenceInDays } from "date-fns";
+import { it } from "date-fns/locale";
+import {
+  ArrowRight,
+  Calendar,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  Dumbbell,
+  FileText,
+  Loader2,
+  MessageSquare,
+  Play,
+  Sparkles,
+  TrendingUp,
+  User,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Dumbbell, 
-  Calendar, 
-  TrendingUp,
-  Play,
-  FileText,
-  MessageSquare,
-  LogOut,
-  Menu,
-  X,
-  Flame,
-  Target,
-  Trophy,
-  ChevronRight,
-  Clock,
-  Star,
-  Loader2,
-  User,
-  AlertCircle,
-  CalendarDays,
-  CreditCard
-} from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
-import { format, isSameDay, parseISO, differenceInDays } from "date-fns";
-import { it } from "date-fns/locale";
+import { Progress } from "@/components/ui/progress";
+import ClientLayout from "@/components/coaching/ClientLayout";
 
 interface WorkoutPlan {
   id: string;
@@ -61,9 +55,7 @@ interface Subscription {
 }
 
 const CoachingDashboard = () => {
-  const { profile, signOut } = useAuth();
-  const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
@@ -72,19 +64,8 @@ const CoachingDashboard = () => {
   const [weekProgress, setWeekProgress] = useState(0);
   const [completedWorkouts, setCompletedWorkouts] = useState(0);
 
-  const navigationItems = [
-    { icon: Target, label: "Dashboard", href: "/coaching" },
-    { icon: Dumbbell, label: "La Mia Scheda", href: "/coaching/scheda" },
-    { icon: TrendingUp, label: "I Miei Progressi", href: "/coaching/progressi" },
-    { icon: Calendar, label: "Appuntamenti", href: "/coaching/appuntamenti" },
-    { icon: MessageSquare, label: "Segnala Problema", href: "/coaching/segnala" },
-    { icon: FileText, label: "Documenti", href: "/coaching/documenti" },
-  ];
-
   useEffect(() => {
-    if (profile?.user_id) {
-      fetchData();
-    }
+    if (profile?.user_id) fetchData();
   }, [profile?.user_id]);
 
   const fetchData = async () => {
@@ -92,7 +73,6 @@ const CoachingDashboard = () => {
     const userId = profile?.user_id;
     const today = new Date().toISOString();
 
-    // Fetch active workout plan
     const { data: plans } = await supabase
       .from("workout_plans")
       .select("*")
@@ -103,20 +83,18 @@ const CoachingDashboard = () => {
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (plans && plans.length > 0) {
+    if (plans?.length) {
       setActivePlan(plans[0]);
-
-      // Fetch coach info
       const { data: coachData } = await supabase
         .from("profiles")
         .select("first_name, last_name")
         .eq("user_id", plans[0].coach_id)
         .single();
-
       if (coachData) setMyCoach(coachData);
+    } else {
+      setActivePlan(null);
     }
 
-    // Fetch upcoming appointments
     const { data: appointments } = await supabase
       .from("appointments")
       .select("*")
@@ -124,10 +102,8 @@ const CoachingDashboard = () => {
       .gte("start_time", today)
       .order("start_time")
       .limit(3);
+    setUpcomingAppointments(appointments || []);
 
-    if (appointments) setUpcomingAppointments(appointments);
-
-    // Fetch active subscription
     const { data: subs } = await supabase
       .from("subscriptions")
       .select("id, status, end_date, plan:membership_plans(name)")
@@ -136,373 +112,229 @@ const CoachingDashboard = () => {
       .order("end_date", { ascending: false })
       .limit(1);
 
-    if (subs && subs.length > 0) {
+    if (subs?.length) {
       setSubscription({
         id: subs[0].id,
         status: subs[0].status,
         end_date: subs[0].end_date,
-        plan_name: (subs[0].plan as any)?.name || "Piano"
+        plan_name: (subs[0].plan as any)?.name || "Piano",
       });
+    } else {
+      setSubscription(null);
     }
 
-    // Calculate actual week progress from workout_completions
-    if (plans && plans.length > 0) {
-      const planId = plans[0].id;
-      
-      // Get all exercises in the plan
+    if (plans?.length) {
       const { data: planExercises } = await supabase
         .from("workout_plan_exercises")
         .select("id, sets")
-        .eq("workout_plan_id", planId);
-      
-      if (planExercises && planExercises.length > 0) {
-        // Calculate total expected sets
-        const totalExpectedSets = planExercises.reduce((sum, ex) => sum + (ex.sets || 3), 0);
-        
-        // Get completions for this week
+        .eq("workout_plan_id", plans[0].id);
+
+      if (planExercises?.length) {
+        const totalExpectedSets = planExercises.reduce((sum, exercise) => sum + (exercise.sets || 3), 0);
         const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
         weekStart.setHours(0, 0, 0, 0);
-        
-        const exerciseIds = planExercises.map(e => e.id);
+
         const { data: completions } = await supabase
           .from("workout_completions")
           .select("id")
           .eq("client_id", userId!)
-          .in("workout_plan_exercise_id", exerciseIds)
+          .in("workout_plan_exercise_id", planExercises.map((exercise) => exercise.id))
           .gte("completed_at", weekStart.toISOString());
-        
+
         const completedSets = completions?.length || 0;
-        const progress = totalExpectedSets > 0 ? Math.round((completedSets / totalExpectedSets) * 100) : 0;
-        
-        setWeekProgress(Math.min(progress, 100));
         setCompletedWorkouts(completedSets);
+        setWeekProgress(Math.min(totalExpectedSets ? Math.round((completedSets / totalExpectedSets) * 100) : 0, 100));
       } else {
-        setWeekProgress(0);
         setCompletedWorkouts(0);
+        setWeekProgress(0);
       }
     } else {
-      setWeekProgress(0);
       setCompletedWorkouts(0);
+      setWeekProgress(0);
     }
 
     setLoading(false);
   };
 
-  const getDaysRemaining = () => {
-    if (!activePlan) return 0;
-    return differenceInDays(new Date(activePlan.end_date), new Date());
-  };
+  const planDays = activePlan ? differenceInDays(new Date(activePlan.end_date), new Date()) : 0;
+  const subscriptionDays = subscription ? differenceInDays(new Date(subscription.end_date), new Date()) : 0;
+  const nextAppointment = upcomingAppointments[0];
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Premium Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 
-        bg-gradient-to-b from-sidebar-background via-sidebar-background to-card
-        border-r border-sidebar-border
-        transform transition-transform duration-300 lg:translate-x-0 lg:static
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="flex flex-col h-full">
-          <div className="h-20 flex items-center px-6 border-b border-sidebar-border">
-            <Link to="/coaching" className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
-                <Flame className="w-7 h-7 text-primary-foreground" />
-              </div>
-              <div>
-                <span className="font-display text-2xl tracking-wider text-sidebar-foreground block">COACHING</span>
-                <span className="text-xs text-primary font-medium tracking-widest">PREMIUM</span>
-              </div>
-            </Link>
-            <button onClick={() => setSidebarOpen(false)} className="ml-auto lg:hidden text-sidebar-foreground">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* User Card */}
-          <div className="p-4">
-            <div className="bg-gradient-to-r from-primary/10 to-transparent rounded-lg p-4 border border-primary/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                  <span className="font-display text-xl text-primary">
-                    {profile?.first_name?.[0]}{profile?.last_name?.[0]}
-                  </span>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{profile?.first_name} {profile?.last_name}</p>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-primary fill-primary" />
-                    <span className="text-xs text-primary">Cliente Premium</span>
-                  </div>
-                </div>
-              </div>
-              {myCoach && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <User className="w-4 h-4" />
-                  <span>Coach: {myCoach.first_name} {myCoach.last_name}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-            {navigationItems.map((item) => {
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  className={`flex items-center gap-3 px-4 py-3.5 rounded-lg transition-all duration-200 ${
-                    isActive 
-                      ? 'bg-gradient-to-r from-primary/20 to-primary/5 text-primary border-l-2 border-primary' 
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                  {isActive && <ChevronRight className="w-4 h-4 ml-auto" />}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="p-4 border-t border-sidebar-border">
-            <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive" onClick={signOut}>
-              <LogOut className="w-5 h-5" />Esci
-            </Button>
-          </div>
+    <ClientLayout title="Oggi">
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </aside>
-
-      {sidebarOpen && <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-
-      <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-        <header className="h-16 bg-gradient-to-r from-card to-background border-b border-border flex items-center px-6">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-foreground mr-4">
-            <Menu className="w-6 h-6" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <h1 className="font-display text-xl tracking-wider">LA TUA GIORNATA</h1>
-          </div>
-        </header>
-
-        <div className="flex-1 p-6 space-y-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      ) : (
+        <div className="space-y-5">
+          <section className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Bentornato,</p>
+              <h2 className="mt-1 font-display text-3xl tracking-wide">
+                {profile?.first_name || "Atleta"}
+              </h2>
             </div>
-          ) : (
-            <>
-              {/* Active Plan Card */}
-              <Card className="relative overflow-hidden bg-gradient-to-br from-card via-card to-primary/5 border-border">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                <CardHeader>
-                  <div className="flex items-center gap-2 text-primary mb-2">
-                    <Dumbbell className="w-5 h-5" />
-                    <span className="text-sm font-medium tracking-wider uppercase">Scheda Attiva</span>
-                  </div>
-                  <CardTitle className="font-display text-3xl tracking-wider">
-                    {activePlan?.name || "Nessuna scheda attiva"}
-                  </CardTitle>
-                  <CardDescription className="text-base">
-                    {activePlan?.description || "Attendi la tua scheda personalizzata dal coach"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {activePlan ? (
-                    <div className="flex items-center gap-6">
-                      <Link to="/coaching/scheda">
-                        <Button size="lg" className="gap-2 font-display tracking-wider">
-                          <Play className="w-5 h-5" />VEDI SCHEDA
-                        </Button>
-                      </Link>
-                      <Badge variant="secondary" className="text-sm">
-                        {getDaysRemaining()} giorni rimanenti
-                      </Badge>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3 text-muted-foreground">
-                      <Clock className="w-5 h-5" />
-                      <span>In attesa della scheda dal tuo coach</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            {myCoach && (
+              <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs text-muted-foreground sm:flex">
+                <User className="h-4 w-4 text-primary" />
+                Coach {myCoach.first_name}
+              </div>
+            )}
+          </section>
 
-              {/* Stats Row */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="bg-card border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm text-muted-foreground">Progresso Settimanale</span>
-                      <TrendingUp className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-end justify-between">
-                        <span className="text-3xl font-display">{weekProgress}%</span>
-                        <span className="text-sm text-muted-foreground">{completedWorkouts}/5 sessioni</span>
-                      </div>
-                      <Progress value={weekProgress} className="h-2" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-card border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm text-muted-foreground">Prossimo Appuntamento</span>
-                      <Calendar className="w-5 h-5 text-primary" />
-                    </div>
-                    {upcomingAppointments.length > 0 ? (
-                      <div>
-                        <p className="text-lg font-medium">{upcomingAppointments[0].title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(parseISO(upcomingAppointments[0].start_time), "d MMMM 'alle' HH:mm", { locale: it })}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground">Nessun appuntamento</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-card border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm text-muted-foreground">Il Tuo Coach</span>
-                      <User className="w-5 h-5 text-primary" />
-                    </div>
-                    {myCoach ? (
-                      <div>
-                        <p className="text-lg font-medium">{myCoach.first_name} {myCoach.last_name}</p>
-                        <Link to="/coaching/segnala">
-                          <Button variant="link" className="p-0 h-auto text-primary">Invia messaggio</Button>
-                        </Link>
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground">Non assegnato</p>
-                    )}
-                  </CardContent>
-                </Card>
+          <section className="relative overflow-hidden rounded-[1.75rem] border border-primary/20 bg-gradient-to-br from-primary/25 via-card to-card p-5 shadow-xl shadow-primary/5">
+            <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary/20 blur-3xl" />
+            <div className="relative">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.17em] text-primary">
+                  <Sparkles className="h-4 w-4" />
+                  Allenamento di oggi
+                </span>
+                {activePlan && (
+                  <Badge className="rounded-full bg-background/70 text-foreground hover:bg-background/70">
+                    {planDays > 0 ? `${planDays} giorni` : "In scadenza"}
+                  </Badge>
+                )}
               </div>
 
-              {/* Scadenze */}
-              {(activePlan || subscription) && (
-                <Card className="bg-card border-border">
-                  <CardHeader>
-                    <CardTitle className="font-display tracking-wider flex items-center gap-2">
-                      <CalendarDays className="w-5 h-5 text-primary" />
-                      Le Tue Scadenze
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {activePlan && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <div className="flex items-center gap-3">
-                          <Dumbbell className="w-5 h-5 text-primary" />
-                          <div>
-                            <p className="font-medium text-sm">Scheda: {activePlan.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Scade il {format(new Date(activePlan.end_date), "d MMMM yyyy", { locale: it })}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant={getDaysRemaining() <= 7 ? "destructive" : "secondary"}>
-                          {getDaysRemaining() > 0 ? `${getDaysRemaining()} giorni` : "Scaduta"}
-                        </Badge>
-                      </div>
-                    )}
-                    {subscription && (() => {
-                      const subDays = differenceInDays(new Date(subscription.end_date), new Date());
-                      return (
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                          <div className="flex items-center gap-3">
-                            <CreditCard className="w-5 h-5 text-primary" />
-                            <div>
-                              <p className="font-medium text-sm">Abbonamento: {subscription.plan_name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Scade il {format(new Date(subscription.end_date), "d MMMM yyyy", { locale: it })}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant={subDays <= 7 ? "destructive" : "secondary"}>
-                            {subDays > 0 ? `${subDays} giorni` : "Scaduto"}
-                          </Badge>
-                        </div>
-                      );
-                    })()}
-                  </CardContent>
-                </Card>
-              )}
+              <h3 className="max-w-lg font-display text-3xl leading-tight tracking-wide">
+                {activePlan?.name || "La tua scheda sta arrivando"}
+              </h3>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                {activePlan?.description || "Il coach sta preparando il tuo prossimo programma personalizzato."}
+              </p>
 
-              {/* Quick Actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="bg-card border-border">
-                  <CardHeader>
-                    <CardTitle className="font-display tracking-wider flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-primary" />
-                      Prossimi Appuntamenti
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {upcomingAppointments.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Nessun appuntamento in programma</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {upcomingAppointments.map(apt => (
-                          <div key={apt.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                            <div>
-                              <p className="font-medium">{apt.title}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {format(parseISO(apt.start_time), "EEEE d MMMM 'alle' HH:mm", { locale: it })}
-                              </p>
-                            </div>
-                            {apt.location && (
-                              <Badge variant="outline">{apt.location}</Badge>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-card border-border">
-                  <CardHeader>
-                    <CardTitle className="font-display tracking-wider flex items-center gap-2">
-                      <Play className="w-5 h-5 text-primary" />
-                      Azioni Rapide
-                    </CardTitle>
-                  </CardHeader>
-                <CardContent className="space-y-3">
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                {activePlan ? (
+                  <Button asChild className="h-12 rounded-2xl px-5 font-semibold">
                     <Link to="/coaching/scheda">
-                      <Button className="w-full justify-start gap-3" variant="secondary">
-                        <Dumbbell className="w-5 h-5" />Vedi Scheda Allenamento
-                      </Button>
+                      <Play className="mr-2 h-5 w-5 fill-current" />
+                      Inizia allenamento
                     </Link>
-                    <Link to="/coaching/progressi">
-                      <Button className="w-full justify-start gap-3" variant="secondary">
-                        <TrendingUp className="w-5 h-5" />I Miei Progressi
-                      </Button>
-                    </Link>
-                    <Link to="/coaching/segnala">
-                      <Button className="w-full justify-start gap-3" variant="secondary">
-                        <MessageSquare className="w-5 h-5" />Segnala Problema
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4 text-primary" />
+                    In attesa della scheda
+                  </div>
+                )}
+                <Button asChild variant="secondary" className="h-12 rounded-2xl px-5">
+                  <Link to="/coaching/progressi">
+                    Vedi progressi
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
               </div>
-            </>
-          )}
+            </div>
+          </section>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Link to="/coaching/progressi" className="rounded-2xl border border-border bg-card p-4 transition active:scale-[0.99]">
+              <div className="flex items-center justify-between">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <span className="font-display text-2xl">{weekProgress}%</span>
+              </div>
+              <p className="mt-4 text-xs font-medium text-muted-foreground">Progresso settimanale</p>
+              <Progress value={weekProgress} className="mt-3 h-1.5" />
+            </Link>
+
+            <Link to="/coaching/appuntamenti" className="rounded-2xl border border-border bg-card p-4 transition active:scale-[0.99]">
+              <Calendar className="h-5 w-5 text-primary" />
+              <p className="mt-4 font-semibold leading-tight">{nextAppointment?.title || "Nessun appuntamento"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {nextAppointment
+                  ? format(parseISO(nextAppointment.start_time), "d MMM · HH:mm", { locale: it })
+                  : "Agenda libera"}
+              </p>
+            </Link>
+
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <Dumbbell className="h-5 w-5 text-primary" />
+              <p className="mt-4 font-display text-2xl">{completedWorkouts}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Serie completate</p>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <CreditCard className="h-5 w-5 text-primary" />
+              <p className="mt-4 font-semibold leading-tight">{subscription?.plan_name || "Nessun piano"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {subscription ? (subscriptionDays > 0 ? `${subscriptionDays} giorni rimasti` : "Scaduto") : "Contatta la reception"}
+              </p>
+            </div>
+          </div>
+
+          <section className="rounded-[1.5rem] border border-border bg-card p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Agenda</p>
+                <h3 className="mt-1 font-display text-xl tracking-wide">Prossimi appuntamenti</h3>
+              </div>
+              <Link to="/coaching/appuntamenti" className="text-sm font-medium text-primary">Vedi tutti</Link>
+            </div>
+
+            {upcomingAppointments.length ? (
+              <div className="space-y-2">
+                {upcomingAppointments.map((appointment) => (
+                  <Link
+                    key={appointment.id}
+                    to="/coaching/appuntamenti"
+                    className="flex items-center gap-3 rounded-2xl bg-secondary/50 p-3.5"
+                  >
+                    <div className="flex h-11 w-11 flex-col items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <span className="text-[10px] font-semibold uppercase">
+                        {format(parseISO(appointment.start_time), "MMM", { locale: it })}
+                      </span>
+                      <span className="font-display text-lg leading-none">
+                        {format(parseISO(appointment.start_time), "d")}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{appointment.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {format(parseISO(appointment.start_time), "EEEE · HH:mm", { locale: it })}
+                        {appointment.location ? ` · ${appointment.location}` : ""}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-secondary/40 px-4 py-7 text-center text-sm text-muted-foreground">
+                <CalendarDays className="mx-auto mb-2 h-7 w-7 text-primary" />
+                Nessun appuntamento in programma
+              </div>
+            )}
+          </section>
+
+          <section className="grid gap-3 sm:grid-cols-2">
+            <Link to="/coaching/documenti" className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <FileText className="h-5 w-5" />
+              </span>
+              <span className="flex-1">
+                <span className="block font-medium">Documenti</span>
+                <span className="text-xs text-muted-foreground">File e comunicazioni del coach</span>
+              </span>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </Link>
+
+            <Link to="/coaching/segnala" className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <MessageSquare className="h-5 w-5" />
+              </span>
+              <span className="flex-1">
+                <span className="block font-medium">Serve aiuto?</span>
+                <span className="text-xs text-muted-foreground">Invia una richiesta al coach</span>
+              </span>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </Link>
+          </section>
         </div>
-      </main>
-    </div>
+      )}
+    </ClientLayout>
   );
 };
 
