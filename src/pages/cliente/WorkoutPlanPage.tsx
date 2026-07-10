@@ -1,16 +1,15 @@
 import { useParams } from "react-router-dom";
 import ClientLayout from "@/components/coaching/ClientLayout";
 import WorkoutPlanDays from "@/components/coaching/WorkoutPlanDays";
-import WorkoutDayDetail from "@/components/coaching/WorkoutDayDetail";
+import OfflineWorkoutDayDetail from "@/components/coaching/OfflineWorkoutDayDetail";
 
 const WorkoutPlanPage = () => {
   const { dayId } = useParams<{ dayId: string }>();
 
-  // If dayId is present, show day detail, otherwise show days grid
   if (dayId) {
     return (
       <ClientLayout title={`GIORNO ${dayId}`}>
-        <WorkoutDayDetail />
+        <OfflineWorkoutDayDetail />
       </ClientLayout>
     );
   }
