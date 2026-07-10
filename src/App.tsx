@@ -32,7 +32,7 @@ import CoachCalendarPage from "./pages/coach/CoachCalendarPage";
 import CoachReportsPage from "./pages/coach/CoachReportsPage";
 
 import PalestraDashboard from "./pages/cliente/PalestraDashboard";
-import CoachingDashboard from "./pages/cliente/CoachingDashboard";
+import MobileCoachingHome from "./pages/cliente/MobileCoachingHome";
 import WorkoutPlanPage from "./pages/cliente/WorkoutPlanPage";
 import WorkoutArchivePage from "./pages/cliente/WorkoutArchivePage";
 import ProgressPage from "./pages/cliente/ProgressPage";
@@ -80,7 +80,7 @@ const App = () => (
             <Route path="/palestra" element={<ProtectedRoute allowedRoles={["cliente_palestra", "cliente_corso"]}><PalestraDashboard /></ProtectedRoute>} />
             <Route path="/palestra/*" element={<ProtectedRoute allowedRoles={["cliente_palestra", "cliente_corso"]}><PalestraDashboard /></ProtectedRoute>} />
 
-            <Route path="/coaching" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><CoachingDashboard /></ProtectedRoute>} />
+            <Route path="/coaching" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><MobileCoachingHome /></ProtectedRoute>} />
             <Route path="/coaching/scheda" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><WorkoutPlanPage /></ProtectedRoute>} />
             <Route path="/coaching/scheda/:dayId" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><WorkoutPlanPage /></ProtectedRoute>} />
             <Route path="/coaching/archivio" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><WorkoutArchivePage /></ProtectedRoute>} />
@@ -88,7 +88,7 @@ const App = () => (
             <Route path="/coaching/appuntamenti" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><AppointmentsPage /></ProtectedRoute>} />
             <Route path="/coaching/documenti" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><DocumentsPage /></ProtectedRoute>} />
             <Route path="/coaching/segnala" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><ReportProblemPage /></ProtectedRoute>} />
-            <Route path="/coaching/*" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><CoachingDashboard /></ProtectedRoute>} />
+            <Route path="/coaching/*" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><MobileCoachingHome /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
