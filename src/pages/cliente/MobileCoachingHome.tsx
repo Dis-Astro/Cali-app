@@ -47,7 +47,7 @@ const MobileCoachingHome = () => {
           .from("profiles")
           .select("first_name, last_name")
           .eq("user_id", currentPlan.coach_id)
-          .single();
+          .maybeSingle();
         if (coach) setCoachName(`${coach.first_name} ${coach.last_name}`);
 
         const { data: exercises } = await supabase
