@@ -1,0 +1,128 @@
+name: iOS Simulator Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - feat/ios-super-power-gym
+    paths:
+      - "src/**"
+      - "public/**"
+      - "resources/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.ts"
+      - ".github/workflows/ios-simulator.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "public/**"
+      - "resources/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.ts"
+      - ".github/workflows/ios-simulator.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke-test:
+    name: Build and launch on iPhone Simulator
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Restore application artwork
+        shell: bash
+        run: |
+          mkdir -p resources
+          cat resources/icon.parts/part-* | python3 -c "import base64,sys; open('resources/icon.jpg','wb').write(base64.b64decode(sys.stdin.buffer.read()))"
+          sips -s format png resources/icon.jpg --out resources/icon-only.png
+          cp resources/icon-only.png resources/splash.png
+
+      - name: Build React application
+        run: npm run build
+
+      - name: Generate iOS project
+        shell: bash
+        run: |
+          rm -rf ios
+          npx cap add ios
+          npx cap sync ios
+          npx --yes @capacitor/assets@3 generate --ios
+
+      - name: Build for iPhone Simulator
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          if [ -d ios/App/App.xcworkspace ]; then
+            xcodebuild \
+              -workspace ios/App/App.xcworkspace \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath build/DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              build | tee build/xcodebuild.log
+          else
+            xcodebuild \
+              -project ios/App/App.xcodeproj \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath build/DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              build | tee build/xcodebuild.log
+          fi
+
+      - name: Launch application in Simulator
+        shell: bash
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Debug-iphonesimulator/App.app"
+          DEVICE_UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for runtime in d.values() for x in runtime if x['name'].startswith('iPhone')))" )
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
+          xcrun simctl launch "$DEVICE_UDID" it.superpowergym.app
+          sleep 8
+          xcrun simctl io "$DEVICE_UDID" screenshot build/simulator-screenshot.png
+
+      - name: Package simulator application
+        shell: bash
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/DerivedData/Build/Products/Debug-iphonesimulator/App.app \
+            build/SuperPowerGym-Simulator.zip
+          tar --exclude='ios/App/Pods' --exclude='ios/App/build' -czf build/SuperPowerGym-XcodeProject.tar.gz ios
+
+      - name: Upload build results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: super-power-gym-ios-simulator
+          path: |
+            build/SuperPowerGym-Simulator.zip
+            build/SuperPowerGym-XcodeProject.tar.gz
+            build/simulator-screenshot.png
+            build/xcodebuild.log
+          if-no-files-found: warn
+          retention-days: 14
