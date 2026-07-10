@@ -21,15 +21,25 @@ const context = await browser.newContext({
 const page = await context.newPage();
 const report = [];
 const consoleErrors = [];
+const networkErrors = [];
 
 page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text());
 });
 page.on('pageerror', (error) => consoleErrors.push(error.message));
+page.on('response', (response) => {
+  if (response.status() >= 400) {
+    networkErrors.push({
+      status: response.status(),
+      method: response.request().method(),
+      url: response.url(),
+    });
+  }
+});
 
 async function waitForScreen() {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(2200);
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
@@ -67,10 +77,10 @@ await page.waitForTimeout(3000);
 const detectedPath = new URL(page.url()).pathname;
 const detectedRole = detectedPath.startsWith('/admin')
   ? 'admin'
-  : detectedPath.startsWith('/coach')
-    ? 'coach'
-    : detectedPath.startsWith('/coaching')
-      ? 'cliente_coaching'
+  : detectedPath.startsWith('/coaching')
+    ? 'cliente_coaching'
+    : detectedPath.startsWith('/coach')
+      ? 'coach'
       : detectedPath.startsWith('/palestra')
         ? 'cliente_palestra'
         : null;
@@ -85,6 +95,9 @@ await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
   detectedRole,
   screenshots: report,
   consoleErrors: [...new Set(consoleErrors)],
+  networkErrors: networkErrors.filter((item, index, array) =>
+    array.findIndex((candidate) => candidate.status === item.status && candidate.method === item.method && candidate.url === item.url) === index
+  ),
 }, null, 2));
 
 await browser.close();
