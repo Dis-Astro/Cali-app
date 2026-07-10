@@ -1,6 +1,5 @@
-import { ReactNode } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
   Archive,
   CalendarDays,
@@ -13,7 +12,9 @@ import {
   User,
   Zap,
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import OfflineSyncStatus from "@/components/coaching/OfflineSyncStatus";
 
 interface ClientLayoutProps {
   children: ReactNode;
@@ -52,7 +53,7 @@ const ClientLayout = ({ children, title }: ClientLayoutProps) => {
           </div>
         </div>
 
-        <div className="px-4 py-5">
+        <div className="space-y-3 px-4 py-5">
           <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-primary">
@@ -64,6 +65,7 @@ const ClientLayout = ({ children, title }: ClientLayoutProps) => {
               </div>
             </div>
           </div>
+          <OfflineSyncStatus />
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
@@ -97,15 +99,18 @@ const ClientLayout = ({ children, title }: ClientLayoutProps) => {
 
       <div className="flex min-h-[100dvh] flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-border bg-background/90 px-4 backdrop-blur-xl native-safe-top">
-          <div className="mx-auto flex h-16 max-w-5xl items-center justify-between">
+          <div className="mx-auto flex min-h-16 max-w-5xl items-center justify-between gap-3 py-2">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Super Power Gym</p>
               <h1 className="truncate font-display text-xl tracking-wide">{title}</h1>
             </div>
-            <div className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary lg:hidden">
-              <span className="font-display text-base">
-                {profile?.first_name?.[0]}{profile?.last_name?.[0]}
-              </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <OfflineSyncStatus />
+              <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary sm:flex lg:hidden">
+                <span className="font-display text-base">
+                  {profile?.first_name?.[0]}{profile?.last_name?.[0]}
+                </span>
+              </div>
             </div>
           </div>
         </header>
