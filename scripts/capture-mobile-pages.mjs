@@ -43,27 +43,51 @@ async function waitForScreen() {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-async function saveScreen(route, name) {
+async function saveViewport(route, name) {
   const startedAt = Date.now();
   let status = 'ok';
   let finalPath = '';
   let note = '';
+  const files = [];
 
   try {
     await page.goto(`${baseURL}${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await waitForScreen();
     finalPath = new URL(page.url()).pathname;
-    await page.screenshot({ path: path.join(outputDir, `${name}.png`), fullPage: true });
+
+    const firstFile = `${name}-01.png`;
+    await page.screenshot({ path: path.join(outputDir, firstFile), fullPage: false });
+    files.push(firstFile);
+
+    const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+    const viewportHeight = page.viewportSize()?.height || 844;
+
+    if (scrollHeight > viewportHeight * 1.35) {
+      await page.evaluate((height) => window.scrollTo({ top: height * 0.8, behavior: 'instant' }), viewportHeight);
+      await page.waitForTimeout(500);
+      const secondFile = `${name}-02.png`;
+      await page.screenshot({ path: path.join(outputDir, secondFile), fullPage: false });
+      files.push(secondFile);
+    }
+
+    if (scrollHeight > viewportHeight * 2.2) {
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+      await page.waitForTimeout(500);
+      const thirdFile = `${name}-03.png`;
+      await page.screenshot({ path: path.join(outputDir, thirdFile), fullPage: false });
+      files.push(thirdFile);
+    }
+
     if (finalPath !== route && route !== '/dashboard') note = `Reindirizzata a ${finalPath}`;
   } catch (error) {
     status = 'errore';
     note = error instanceof Error ? error.message : String(error);
   }
 
-  report.push({ route, name, finalPath, status, note, elapsedMs: Date.now() - startedAt });
+  report.push({ route, name, files, finalPath, status, note, elapsedMs: Date.now() - startedAt });
 }
 
-for (const [route, name] of publicRoutes) await saveScreen(route, name);
+for (const [route, name] of publicRoutes) await saveViewport(route, name);
 
 await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
 await page.locator('#email').fill(account);
@@ -86,11 +110,12 @@ const detectedRole = detectedPath.startsWith('/admin')
         : null;
 
 if (!detectedRole) throw new Error(`Ruolo non riconosciuto: ${detectedPath}`);
-for (const [route, name] of roleRoutes[detectedRole]) await saveScreen(route, name);
+for (const [route, name] of roleRoutes[detectedRole]) await saveViewport(route, name);
 
 await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
   generatedAt: new Date().toISOString(),
   device: 'iPhone 15 Pro / WebKit',
+  captureMode: 'viewport-based',
   detectedPath,
   detectedRole,
   screenshots: report,
@@ -101,4 +126,4 @@ await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
 }, null, 2));
 
 await browser.close();
-console.log(`Audit completato: ${report.length} schermate, ruolo ${detectedRole}.`);
+console.log(`Audit completato: ${report.length} pagine, ruolo ${detectedRole}.`);
