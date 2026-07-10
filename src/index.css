@@ -4,50 +4,35 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* Design System - Palestra Calisthenics Premium Urban Style */
+/* Design System - Super Power Gym */
 
 @layer base {
   :root {
     --background: 0 0% 4%;
     --foreground: 0 0% 98%;
-
     --card: 0 0% 8%;
     --card-foreground: 0 0% 98%;
-
     --popover: 0 0% 8%;
     --popover-foreground: 0 0% 98%;
-
     --primary: 38 92% 50%;
     --primary-foreground: 0 0% 4%;
-
     --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 98%;
-
     --muted: 0 0% 15%;
     --muted-foreground: 0 0% 65%;
-
     --accent: 38 92% 50%;
     --accent-foreground: 0 0% 4%;
-
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-
     --border: 0 0% 20%;
     --input: 0 0% 15%;
     --ring: 38 92% 50%;
-
     --radius: 0.25rem;
-
-    /* Custom tokens */
     --hero-overlay: 0 0% 0%;
     --success: 142 76% 36%;
     --success-foreground: 0 0% 98%;
-
-    /* Fonts */
     --font-display: 'Bebas Neue', sans-serif;
     --font-body: 'Inter', sans-serif;
-
-    /* Sidebar tokens */
     --sidebar-background: 0 0% 6%;
     --sidebar-foreground: 0 0% 90%;
     --sidebar-primary: 38 92% 50%;
@@ -56,6 +41,10 @@
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 15%;
     --sidebar-ring: 38 92% 50%;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
   }
 
   .dark {
@@ -92,25 +81,36 @@
 @layer base {
   * {
     @apply border-border;
+    min-width: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    background: hsl(var(--background));
+    height: 100%;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-body);
     overflow-x: hidden;
+    min-height: 100%;
+    overscroll-behavior-y: none;
   }
 
   html, body, #root {
     width: 100%;
     max-width: 100%;
+    min-height: 100%;
     overflow-x: hidden;
   }
 
-  * {
-    min-width: 0;
+  button, a, input, select, textarea {
+    touch-action: manipulation;
   }
 
-  /* Prevent auto-zoom on mobile inputs */
   input, select, textarea {
     font-size: 16px !important;
   }
@@ -128,6 +128,25 @@
 }
 
 @layer components {
+  .native-safe-top {
+    padding-top: var(--safe-top);
+  }
+
+  .native-safe-bottom {
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .native-safe-x {
+    padding-left: max(1rem, var(--safe-left));
+    padding-right: max(1rem, var(--safe-right));
+  }
+
+  .app-screen {
+    min-height: 100dvh;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+
   .split-panel {
     @apply relative flex items-center justify-center cursor-pointer transition-all duration-500 ease-out;
     background: hsl(var(--hero-overlay) / 0.6);
@@ -145,7 +164,6 @@
   .split-title {
     @apply text-5xl md:text-7xl lg:text-8xl font-bold tracking-wider transition-all duration-500;
     font-family: var(--font-display);
-    color: hsl(var(--foreground));
   }
 
   .split-divider {
@@ -158,6 +176,11 @@
 
   .page-container {
     @apply min-h-screen bg-background px-4 py-12 md:py-20;
+    min-height: 100dvh;
+    padding-top: calc(2rem + var(--safe-top));
+    padding-bottom: calc(2rem + var(--safe-bottom));
+    padding-left: max(1rem, var(--safe-left));
+    padding-right: max(1rem, var(--safe-right));
   }
 
   .section-title {
