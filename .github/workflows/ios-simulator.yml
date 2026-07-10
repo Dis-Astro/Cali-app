@@ -46,24 +46,20 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
-      - name: Restore application artwork
-        shell: bash
-        run: |
-          mkdir -p resources
-          cat resources/icon.parts/part-* | python3 -c "import base64,sys; open('resources/icon.jpg','wb').write(base64.b64decode(sys.stdin.buffer.read()))"
-          sips -s format png resources/icon.jpg --out resources/icon-only.png
-          cp resources/icon-only.png resources/splash.png
-
       - name: Build React application
         run: npm run build
 
-      - name: Generate iOS project
+      - name: Generate iOS project and artwork
         shell: bash
         run: |
           rm -rf ios
           npx cap add ios
           npx cap sync ios
-          npx --yes @capacitor/assets@3 generate --ios
+          npx --yes @capacitor/assets@3 generate --ios \
+            --iconBackgroundColor '#100017' \
+            --iconBackgroundColorDark '#100017' \
+            --splashBackgroundColor '#100017' \
+            --splashBackgroundColorDark '#100017'
 
       - name: Build for iPhone Simulator
         shell: bash
