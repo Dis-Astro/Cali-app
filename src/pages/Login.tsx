@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Lock, Mail, AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Eye, EyeOff, Lock, Mail, ShieldCheck, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,46 +17,34 @@ type LoginFormData = z.infer<typeof loginSchema>;
 const Login = () => {
   const navigate = useNavigate();
   const { signIn, user, loading: authLoading } = useAuth();
-  const [formData, setFormData] = useState<LoginFormData>({
-    email: "",
-    password: "",
-  });
+  const [formData, setFormData] = useState<LoginFormData>({ email: "", password: "" });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  // Redirect if already logged in - use useEffect to avoid calling navigate during render
   useEffect(() => {
-    if (user && !authLoading) {
-      navigate("/dashboard", { replace: true });
-    }
+    if (user && !authLoading) navigate("/dashboard", { replace: true });
   }, [user, authLoading, navigate]);
 
   if (authLoading) return null;
 
   const handleChange = (field: keyof LoginFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
-    if (authError) {
-      setAuthError(null);
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
+    if (authError) setAuthError(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsSubmitting(true);
     setAuthError(null);
 
     const result = loginSchema.safeParse(formData);
-    
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof LoginFormData, string>> = {};
-      result.error.errors.forEach((err) => {
-        if (err.path[0]) {
-          fieldErrors[err.path[0] as keyof LoginFormData] = err.message;
-        }
+      result.error.errors.forEach((error) => {
+        if (error.path[0]) fieldErrors[error.path[0] as keyof LoginFormData] = error.message;
       });
       setErrors(fieldErrors);
       setIsSubmitting(false);
@@ -64,119 +52,107 @@ const Login = () => {
     }
 
     const { error } = await signIn(formData.email, formData.password);
-    
     if (error) {
-      // Handle specific error messages
-      if (error.message.includes('Invalid login credentials')) {
-        setAuthError('Email o password non corretti');
-      } else if (error.message.includes('Email not confirmed')) {
-        setAuthError('Email non confermata. Contatta l\'amministratore.');
-      } else {
-        setAuthError(error.message);
-      }
+      if (error.message.includes("Invalid login credentials")) setAuthError("Email o password non corretti");
+      else if (error.message.includes("Email not confirmed")) setAuthError("Email non confermata. Contatta l'amministratore.");
+      else setAuthError(error.message);
       setIsSubmitting(false);
       return;
     }
 
-    // Success - navigate to dashboard
     navigate("/dashboard", { replace: true });
   };
 
   return (
-    <div className="page-container flex items-center justify-center">
-      <div className="w-full max-w-md">
-        {/* Back Link */}
-        <Link 
-          to="/" 
-          className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="font-body text-sm uppercase tracking-wider">Torna alla Home</span>
-        </Link>
+    <div className="relative min-h-[100dvh] overflow-hidden bg-background px-5 native-safe-top native-safe-bottom">
+      <div className="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(218,0,255,0.2),transparent_65%)]" />
 
-        {/* Header */}
-        <header className="mb-8 text-center animate-fade-in">
-          <div className="flex justify-center mb-6">
-            <div className="flex h-20 w-20 items-center justify-center rounded-sm bg-secondary">
-              <Lock className="h-10 w-10 text-primary" />
-            </div>
+      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col">
+        <header className="flex items-center justify-between pt-5">
+          <Link
+            to="/"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-card/80"
+            aria-label="Torna alla home"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            Accesso protetto
           </div>
-          <h1 className="section-title text-foreground">
-            AREA CLIENTI
-          </h1>
-          <p className="text-muted-foreground font-body">
-            Accedi per visualizzare le tue schede, i tuoi progressi e i pagamenti.
-          </p>
         </header>
 
-        {/* Auth Error Alert */}
-        {authError && (
-          <Alert variant="destructive" className="mb-6 animate-fade-in">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{authError}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="form-container space-y-5 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
-              Email
-            </label>
-            <div className="relative">
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                className={`pl-10 ${errors.email ? "border-destructive" : ""}`}
-                placeholder="La tua email"
-                autoComplete="email"
-              />
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <main className="flex flex-1 flex-col justify-center py-8">
+          <div className="mb-7">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
+              <Zap className="h-7 w-7 fill-current text-primary-foreground" />
             </div>
-            {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleChange("password", e.target.value)}
-                className={`pl-10 ${errors.password ? "border-destructive" : ""}`}
-                placeholder="La tua password"
-                autoComplete="current-password"
-              />
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            </div>
-            {errors.password && <p className="mt-1 text-sm text-destructive">{errors.password}</p>}
-          </div>
-
-          <Button 
-            type="submit" 
-            className="w-full font-display text-lg tracking-wider"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "ACCESSO IN CORSO..." : "ACCEDI"}
-          </Button>
-        </form>
-
-        {/* Info Notice */}
-        <div className="mt-8 text-center animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <div className="inline-block rounded-sm bg-secondary/50 px-4 py-3 border border-border">
-            <p className="text-sm text-muted-foreground">
-              <span className="text-primary font-semibold">Credenziali mancanti?</span>
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Contatta l'amministratore per ricevere le tue credenziali di accesso
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Super Power Gym</p>
+            <h1 className="mt-2 font-display text-4xl tracking-wide">BENTORNATO</h1>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Accedi per continuare il tuo percorso, controllare la scheda e gestire gli appuntamenti.
             </p>
           </div>
-        </div>
+
+          {authError && (
+            <Alert variant="destructive" className="mb-4 rounded-2xl">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{authError}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border border-border bg-card/90 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <div>
+              <label htmlFor="email" className="mb-2 block text-sm font-medium">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(event) => handleChange("email", event.target.value)}
+                  className={`h-12 rounded-2xl bg-background/70 pl-11 ${errors.email ? "border-destructive" : ""}`}
+                  placeholder="nome@email.it"
+                  autoComplete="email"
+                />
+              </div>
+              {errors.email && <p className="mt-1.5 text-xs text-destructive">{errors.email}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="password" className="mb-2 block text-sm font-medium">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={(event) => handleChange("password", event.target.value)}
+                  className={`h-12 rounded-2xl bg-background/70 pl-11 pr-11 ${errors.password ? "border-destructive" : ""}`}
+                  placeholder="La tua password"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground"
+                  aria-label={showPassword ? "Nascondi password" : "Mostra password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.password && <p className="mt-1.5 text-xs text-destructive">{errors.password}</p>}
+            </div>
+
+            <Button type="submit" className="h-12 w-full rounded-2xl font-semibold" disabled={isSubmitting}>
+              {isSubmitting ? "Accesso in corso..." : "Accedi"}
+            </Button>
+          </form>
+
+          <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
+            Non hai ancora le credenziali? Contatta la reception.
+          </p>
+        </main>
       </div>
     </div>
   );
