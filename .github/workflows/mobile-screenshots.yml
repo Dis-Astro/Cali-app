@@ -1,0 +1,83 @@
+name: Mobile Screenshot Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/ios-super-power-gym
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/mobile-screenshots.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/mobile-screenshots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture authenticated iPhone screens
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_BASE_URL: http://127.0.0.1:4173
+      SCREENSHOT_DIR: build/mobile-screenshots
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install Playwright WebKit
+        run: npx --yes playwright@1.55.0 install --with-deps webkit
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start preview server
+        shell: bash
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > build/preview.log 2>&1 &
+          echo $! > build/preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat build/preview.log
+          exit 1
+
+      - name: Capture all accessible screens
+        run: npx --yes -p playwright@1.55.0 node scripts/capture-mobile-pages.mjs
+
+      - name: Upload screenshots and audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: super-power-gym-mobile-screenshots
+          path: |
+            build/mobile-screenshots
+            build/preview.log
+          if-no-files-found: warn
+          retention-days: 14
