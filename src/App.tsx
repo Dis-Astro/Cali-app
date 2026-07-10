@@ -6,16 +6,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
-// Public pages
 import Index from "./pages/Index";
 import Contatti from "./pages/Contatti";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
-
-// Dashboard router
 import Dashboard from "./pages/Dashboard";
 
-// Admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserManagement from "./pages/admin/UserManagement";
 import ClientDetailPage from "./pages/admin/ClientDetailPage";
@@ -29,17 +25,16 @@ import AdminReportsPage from "./pages/admin/AdminReportsPage";
 import StructurePerformancePage from "./pages/admin/StructurePerformancePage";
 import ExpensesManagement from "./pages/admin/ExpensesManagement";
 
-// Coach pages
 import CoachDashboard from "./pages/coach/CoachDashboard";
 import CoachClientsPage from "./pages/coach/CoachClientsPage";
 import CoachWorkoutsPage from "./pages/coach/CoachWorkoutsPage";
 import CoachCalendarPage from "./pages/coach/CoachCalendarPage";
 import CoachReportsPage from "./pages/coach/CoachReportsPage";
 
-// Client pages
 import PalestraDashboard from "./pages/cliente/PalestraDashboard";
 import CoachingDashboard from "./pages/cliente/CoachingDashboard";
 import WorkoutPlanPage from "./pages/cliente/WorkoutPlanPage";
+import WorkoutArchivePage from "./pages/cliente/WorkoutArchivePage";
 import ProgressPage from "./pages/cliente/ProgressPage";
 import AppointmentsPage from "./pages/cliente/AppointmentsPage";
 import DocumentsPage from "./pages/cliente/DocumentsPage";
@@ -58,7 +53,6 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/contatti" element={<Contatti />} />
             <Route path="/login" element={<Login />} />
-
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 
             <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
@@ -89,6 +83,7 @@ const App = () => (
             <Route path="/coaching" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><CoachingDashboard /></ProtectedRoute>} />
             <Route path="/coaching/scheda" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><WorkoutPlanPage /></ProtectedRoute>} />
             <Route path="/coaching/scheda/:dayId" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><WorkoutPlanPage /></ProtectedRoute>} />
+            <Route path="/coaching/archivio" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><WorkoutArchivePage /></ProtectedRoute>} />
             <Route path="/coaching/progressi" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><ProgressPage /></ProtectedRoute>} />
             <Route path="/coaching/appuntamenti" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><AppointmentsPage /></ProtectedRoute>} />
             <Route path="/coaching/documenti" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><DocumentsPage /></ProtectedRoute>} />
