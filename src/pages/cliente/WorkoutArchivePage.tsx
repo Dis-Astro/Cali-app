@@ -5,6 +5,7 @@ import { it } from "date-fns/locale";
 import { Archive, CalendarDays, ChevronRight, Dumbbell, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { getOfflineCache, setOfflineCache } from "@/lib/offlineSync";
 import ClientLayout from "@/components/coaching/ClientLayout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,24 +24,46 @@ const WorkoutArchivePage = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<ArchivedPlan[]>([]);
+  const [fromCache, setFromCache] = useState(false);
 
   useEffect(() => {
     const fetchPlans = async () => {
       if (!profile?.user_id) return;
       setLoading(true);
+      const cacheKey = `workout-archive:${profile.user_id}`;
+      const cached = await getOfflineCache<ArchivedPlan[]>(cacheKey);
 
-      const { data } = await supabase
-        .from("workout_plans")
-        .select("id, name, description, start_date, end_date, status, plan_type")
-        .eq("client_id", profile.user_id)
-        .is("deleted_at" as any, null)
-        .order("end_date", { ascending: false });
+      if (cached) {
+        setPlans(cached.value);
+        setFromCache(true);
+      }
 
-      setPlans((data || []) as ArchivedPlan[]);
-      setLoading(false);
+      if (!navigator.onLine) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("workout_plans")
+          .select("id, name, description, start_date, end_date, status, plan_type")
+          .eq("client_id", profile.user_id)
+          .is("deleted_at" as any, null)
+          .order("end_date", { ascending: false });
+
+        if (error) throw error;
+        const normalized = (data || []) as ArchivedPlan[];
+        setPlans(normalized);
+        setFromCache(false);
+        await setOfflineCache(cacheKey, normalized);
+      } catch {
+        if (!cached) setPlans([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    fetchPlans();
+    void fetchPlans();
   }, [profile?.user_id]);
 
   const getPlanState = (plan: ArchivedPlan) => {
@@ -56,7 +79,7 @@ const WorkoutArchivePage = () => {
 
   return (
     <ClientLayout title="ARCHIVIO">
-      {loading ? (
+      {loading && !plans.length ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -66,7 +89,10 @@ const WorkoutArchivePage = () => {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Archive className="h-6 w-6" />
             </div>
-            <h2 className="font-display text-3xl tracking-wide">LE TUE SCHEDE</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-3xl tracking-wide">LE TUE SCHEDE</h2>
+              {fromCache && <Badge variant="outline">Disponibili offline</Badge>}
+            </div>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               Consulta le schede attive e quelle concluse. Le indicazioni del coach restano sempre disponibili.
             </p>
@@ -95,12 +121,10 @@ const WorkoutArchivePage = () => {
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <h3 className="break-words font-semibold">{plan.name}</h3>
-                              <Badge variant={state.variant} className="rounded-full text-[10px]">
-                                {state.label}
-                              </Badge>
+                              <Badge variant={state.variant} className="rounded-full text-[10px]">{state.label}</Badge>
                             </div>
                             {plan.description && (
-                              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                              <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
                                 {plan.description}
                               </p>
                             )}
