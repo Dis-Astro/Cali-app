@@ -2,11 +2,27 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { format, isPast } from "date-fns";
 import { it } from "date-fns/locale";
-import { Calendar, CheckCircle2, ChevronRight, Clock, Dumbbell, Loader2, Pause } from "lucide-react";
+import {
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock,
+  Dumbbell,
+  Loader2,
+  Pause,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface WorkoutPlan {
   id: string;
@@ -32,6 +48,7 @@ const WorkoutPlanDays = () => {
   const [loading, setLoading] = useState(true);
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
   const [dayExercises, setDayExercises] = useState<DayExercise[]>([]);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (profile?.user_id) fetchWorkoutPlan();
@@ -39,6 +56,7 @@ const WorkoutPlanDays = () => {
 
   const fetchWorkoutPlan = async () => {
     setLoading(true);
+    setDetailsOpen(false);
     const userId = profile?.user_id;
     const today = new Date().toISOString().split("T")[0];
     let plans: WorkoutPlan[] | null = null;
@@ -144,9 +162,10 @@ const WorkoutPlanDays = () => {
   const status = activePlan.status || "attiva";
   const isExpired = isPast(new Date(activePlan.end_date));
   const query = requestedPlanId ? `?planId=${requestedPlanId}` : "";
+  const hasDetails = Boolean(activePlan.description || activePlan.coach_notes);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl space-y-4">
       <section className="rounded-3xl border border-border bg-gradient-to-br from-card via-card to-primary/5 p-5">
         <div className="mb-3 flex flex-wrap items-center gap-2 text-primary">
           <Dumbbell className="h-5 w-5" />
@@ -167,18 +186,49 @@ const WorkoutPlanDays = () => {
         </div>
 
         <h2 className="break-words font-display text-3xl tracking-wide">{activePlan.name}</h2>
-        {activePlan.description && (
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
-            {activePlan.description}
-          </p>
-        )}
-        {activePlan.coach_notes && (
-          <div className="mt-4 rounded-2xl border-l-2 border-primary bg-secondary/45 p-4">
-            <p className="mb-1 text-sm font-semibold">Note del coach</p>
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
-              {activePlan.coach_notes}
-            </p>
-          </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {format(new Date(activePlan.start_date), "d MMM yyyy", { locale: it })} – {format(new Date(activePlan.end_date), "d MMM yyyy", { locale: it })}
+        </p>
+
+        {hasDetails && (
+          <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen} className="mt-3">
+            {!detailsOpen && activePlan.description && (
+              <p className="line-clamp-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                {activePlan.description}
+              </p>
+            )}
+
+            <CollapsibleContent className="space-y-3 pt-1">
+              {activePlan.description && (
+                <div className="rounded-2xl bg-secondary/35 p-4">
+                  <p className="mb-1 text-sm font-semibold">Indicazioni della scheda</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                    {activePlan.description}
+                  </p>
+                </div>
+              )}
+              {activePlan.coach_notes && (
+                <div className="rounded-2xl border-l-2 border-primary bg-secondary/45 p-4">
+                  <p className="mb-1 text-sm font-semibold">Note del coach</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                    {activePlan.coach_notes}
+                  </p>
+                </div>
+              )}
+            </CollapsibleContent>
+
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                data-testid="plan-details-toggle"
+                className="mt-2 h-10 w-full justify-between rounded-xl px-3 text-sm text-primary"
+              >
+                <span>{detailsOpen ? "Nascondi indicazioni" : "Mostra indicazioni complete"}</span>
+                {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </Collapsible>
         )}
       </section>
 
@@ -196,7 +246,12 @@ const WorkoutPlanDays = () => {
           const progress = day.exercise_count > 0 ? Math.round((day.completed_count / day.exercise_count) * 100) : 0;
 
           return (
-            <Link key={day.day_of_week} to={`/coaching/scheda/${day.day_of_week}${query}`} className="block">
+            <Link
+              key={day.day_of_week}
+              data-testid="workout-day-link"
+              to={`/coaching/scheda/${day.day_of_week}${query}`}
+              className="block"
+            >
               <Card className={`h-full rounded-2xl transition active:scale-[0.99] ${complete ? "border-primary/40 bg-primary/5" : ""}`}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
