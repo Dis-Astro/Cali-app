@@ -43,6 +43,20 @@ async function waitForScreen() {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
+async function saveCurrentViewport(name, note = '') {
+  const file = `${name}.png`;
+  await page.screenshot({ path: path.join(outputDir, file), fullPage: false });
+  report.push({
+    route: new URL(page.url()).pathname + new URL(page.url()).search,
+    name,
+    files: [file],
+    finalPath: new URL(page.url()).pathname,
+    status: 'ok',
+    note,
+    elapsedMs: 0,
+  });
+}
+
 async function saveViewport(route, name) {
   const startedAt = Date.now();
   let status = 'ok';
@@ -53,7 +67,8 @@ async function saveViewport(route, name) {
   try {
     await page.goto(`${baseURL}${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await waitForScreen();
-    finalPath = new URL(page.url()).pathname;
+    const finalUrl = new URL(page.url());
+    finalPath = finalUrl.pathname;
 
     const firstFile = `${name}-01.png`;
     await page.screenshot({ path: path.join(outputDir, firstFile), fullPage: false });
@@ -63,7 +78,7 @@ async function saveViewport(route, name) {
     const viewportHeight = page.viewportSize()?.height || 844;
 
     if (scrollHeight > viewportHeight * 1.35) {
-      await page.evaluate((height) => window.scrollTo({ top: height * 0.8, behavior: 'instant' }), viewportHeight);
+      await page.evaluate((height) => window.scrollTo(0, height * 0.8), viewportHeight);
       await page.waitForTimeout(500);
       const secondFile = `${name}-02.png`;
       await page.screenshot({ path: path.join(outputDir, secondFile), fullPage: false });
@@ -71,20 +86,71 @@ async function saveViewport(route, name) {
     }
 
     if (scrollHeight > viewportHeight * 2.2) {
-      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await page.waitForTimeout(500);
       const thirdFile = `${name}-03.png`;
       await page.screenshot({ path: path.join(outputDir, thirdFile), fullPage: false });
       files.push(thirdFile);
     }
 
-    if (finalPath !== route && route !== '/dashboard') note = `Reindirizzata a ${finalPath}`;
+    if (finalPath !== route.split('?')[0] && route !== '/dashboard') note = `Reindirizzata a ${finalPath}`;
   } catch (error) {
     status = 'errore';
     note = error instanceof Error ? error.message : String(error);
   }
 
   report.push({ route, name, files, finalPath, status, note, elapsedMs: Date.now() - startedAt });
+}
+
+async function captureCoachingFlow() {
+  await page.goto(`${baseURL}/coaching/scheda`, { waitUntil: 'domcontentloaded' });
+  await waitForScreen();
+
+  const detailsToggle = page.getByTestId('plan-details-toggle');
+  if (await detailsToggle.count()) {
+    await detailsToggle.click();
+    await page.waitForTimeout(350);
+    await saveCurrentViewport('37-coaching-scheda-indicazioni-complete', 'Indicazioni complete espanse');
+    await detailsToggle.click();
+    await page.waitForTimeout(250);
+  }
+
+  const firstDay = page.getByTestId('workout-day-link').first();
+  if (await firstDay.count()) {
+    await firstDay.click();
+    await waitForScreen();
+    await saveCurrentViewport('38-coaching-giorno-chiuso', 'Primo giorno con esercizi chiusi');
+
+    const firstExercise = page.getByTestId('exercise-toggle').first();
+    if (await firstExercise.count()) {
+      await firstExercise.click();
+      await page.waitForTimeout(500);
+      await saveCurrentViewport('39-coaching-esercizio-aperto', 'Primo esercizio aperto con testo completo');
+    }
+  }
+
+  await page.goto(`${baseURL}/coaching/archivio`, { waitUntil: 'domcontentloaded' });
+  await waitForScreen();
+  const archiveLinks = page.locator('a[href^="/coaching/scheda?planId="]');
+  if (await archiveLinks.count()) {
+    await archiveLinks.first().click();
+    await waitForScreen();
+    const selectedUrl = new URL(page.url());
+    const planId = selectedUrl.searchParams.get('planId');
+
+    const archivedDay = page.getByTestId('workout-day-link').first();
+    if (planId && await archivedDay.count()) {
+      await archivedDay.click();
+      await waitForScreen();
+      const detailUrl = new URL(page.url());
+      const preserved = detailUrl.searchParams.get('planId') === planId;
+      await saveCurrentViewport(
+        '40-coaching-archivio-giorno',
+        preserved ? 'Archivio: planId preservato nel dettaglio giorno' : 'ERRORE: planId non preservato',
+      );
+      if (!preserved) throw new Error('Il planId della scheda archiviata non è stato preservato nel dettaglio giorno.');
+    }
+  }
 }
 
 for (const [route, name] of publicRoutes) await saveViewport(route, name);
@@ -111,6 +177,7 @@ const detectedRole = detectedPath.startsWith('/admin')
 
 if (!detectedRole) throw new Error(`Ruolo non riconosciuto: ${detectedPath}`);
 for (const [route, name] of roleRoutes[detectedRole]) await saveViewport(route, name);
+if (detectedRole === 'cliente_coaching') await captureCoachingFlow();
 
 await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
   generatedAt: new Date().toISOString(),
@@ -126,4 +193,4 @@ await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
 }, null, 2));
 
 await browser.close();
-console.log(`Audit completato: ${report.length} pagine, ruolo ${detectedRole}.`);
+console.log(`Audit completato: ${report.length} schermate, ruolo ${detectedRole}.`);
