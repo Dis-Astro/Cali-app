@@ -1,6 +1,6 @@
-import { useState, ReactNode } from "react";
-import AdminSidebar from "./AdminSidebar";
+import { useState, type ReactNode } from "react";
 import { Menu } from "lucide-react";
+import AdminSidebar from "./AdminSidebar";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -15,41 +15,35 @@ const AdminLayout = ({ children, title, icon, showBackLink = false, hideSidebar 
 
   if (hideSidebar) {
     return (
-      <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
-        <header className="h-12 bg-card border-b border-border flex items-center px-4">
+      <div className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-background">
+        <header className="flex min-h-14 items-center border-b border-border bg-card px-4 native-safe-top">
           {icon && <span className="mr-3 text-primary">{icon}</span>}
           <h1 className="font-display text-lg tracking-wider">{title}</h1>
         </header>
-        <div className="flex-1 min-w-0 p-4 overflow-auto">
-          {children}
-        </div>
+        <div className="min-w-0 flex-1 overflow-auto p-4 native-safe-bottom">{children}</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden w-full">
-      <AdminSidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)}
-        showBackLink={showBackLink}
-      />
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
+      <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} showBackLink={showBackLink} />
 
-      <main className="flex-1 flex flex-col min-h-0 min-w-0 w-full">
-        {/* Header */}
-        <header className="h-16 flex-shrink-0 bg-card border-b border-border flex items-center px-4 md:px-6 min-w-0">
-          <button 
-            onClick={() => setSidebarOpen(true)} 
-            className="lg:hidden text-foreground mr-4"
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex min-h-16 shrink-0 items-center border-b border-border bg-card px-4 native-safe-top md:px-6">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="mr-4 text-foreground lg:hidden"
+            aria-label="Apri menu amministratore"
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="h-6 w-6" />
           </button>
           {icon && <span className="mr-3 text-primary">{icon}</span>}
-          <h1 className="font-display text-xl md:text-2xl tracking-wider truncate">{title}</h1>
+          <h1 className="truncate font-display text-xl tracking-wider md:text-2xl">{title}</h1>
         </header>
 
-        {/* Content - scrollable */}
-        <div className="flex-1 min-w-0 p-4 md:p-6 overflow-y-auto overflow-x-hidden">
+        <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 native-safe-bottom md:p-6">
           {children}
         </div>
       </main>
