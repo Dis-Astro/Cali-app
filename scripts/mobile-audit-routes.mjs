@@ -16,6 +16,7 @@ export const roleRoutes = {
     ['/admin/segnalazioni', '17-admin-segnalazioni'],
     ['/admin/spese', '18-admin-spese'],
     ['/admin/andamento-struttura', '19-admin-andamento'],
+    ['/admin/utenti/nuovo', '20-admin-nuovo-utente-dialog'],
   ],
   coach: [
     ['/coach', '20-coach-dashboard'],
