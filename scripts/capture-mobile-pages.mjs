@@ -7,6 +7,8 @@ const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:4173';
 const account = process.env.E2E_EMAIL;
 const secret = process.env.E2E_PASSWORD;
 const outputDir = process.env.SCREENSHOT_DIR || 'build/mobile-screenshots';
+const expectedRole = process.env.E2E_EXPECTED_ROLE || '';
+const skipPublic = process.env.E2E_SKIP_PUBLIC === '1';
 
 if (!account || !secret) throw new Error('Credenziali E2E mancanti.');
 await fs.mkdir(outputDir, { recursive: true });
@@ -29,11 +31,7 @@ page.on('console', (message) => {
 page.on('pageerror', (error) => consoleErrors.push(error.message));
 page.on('response', (response) => {
   if (response.status() >= 400) {
-    networkErrors.push({
-      status: response.status(),
-      method: response.request().method(),
-      url: response.url(),
-    });
+    networkErrors.push({ status: response.status(), method: response.request().method(), url: response.url() });
   }
 });
 
@@ -112,7 +110,6 @@ async function captureCoachingFlow() {
     await page.waitForTimeout(350);
     await saveCurrentViewport('37-coaching-scheda-indicazioni-complete', 'Indicazioni complete espanse');
     await detailsToggle.click();
-    await page.waitForTimeout(250);
   }
 
   const firstDay = page.getByTestId('workout-day-link').first();
@@ -120,7 +117,6 @@ async function captureCoachingFlow() {
     await firstDay.click();
     await waitForScreen();
     await saveCurrentViewport('38-coaching-giorno-chiuso', 'Primo giorno con esercizi chiusi');
-
     const firstExercise = page.getByTestId('exercise-toggle').first();
     if (await firstExercise.count()) {
       await firstExercise.click();
@@ -137,23 +133,40 @@ async function captureCoachingFlow() {
     await waitForScreen();
     const selectedUrl = new URL(page.url());
     const planId = selectedUrl.searchParams.get('planId');
-
     const archivedDay = page.getByTestId('workout-day-link').first();
     if (planId && await archivedDay.count()) {
       await archivedDay.click();
       await waitForScreen();
-      const detailUrl = new URL(page.url());
-      const preserved = detailUrl.searchParams.get('planId') === planId;
-      await saveCurrentViewport(
-        '40-coaching-archivio-giorno',
-        preserved ? 'Archivio: planId preservato nel dettaglio giorno' : 'ERRORE: planId non preservato',
-      );
-      if (!preserved) throw new Error('Il planId della scheda archiviata non è stato preservato nel dettaglio giorno.');
+      const preserved = new URL(page.url()).searchParams.get('planId') === planId;
+      await saveCurrentViewport('40-coaching-archivio-giorno', preserved ? 'Archivio: planId preservato' : 'ERRORE: planId non preservato');
+      if (!preserved) throw new Error('Il planId della scheda archiviata non è stato preservato.');
     }
   }
 }
 
-for (const [route, name] of publicRoutes) await saveViewport(route, name);
+async function captureAdminFlow() {
+  await page.goto(`${baseURL}/admin`, { waitUntil: 'domcontentloaded' });
+  await waitForScreen();
+  const menuButton = page.getByRole('button', { name: 'Apri menu amministratore' });
+  if (await menuButton.count()) {
+    await menuButton.click();
+    await page.waitForTimeout(350);
+    await saveCurrentViewport('19-admin-menu-mobile', 'Menu mobile amministratore aperto');
+  }
+
+  await page.goto(`${baseURL}/admin/utenti`, { waitUntil: 'domcontentloaded' });
+  await waitForScreen();
+  const newUserButton = page.getByRole('button', { name: /nuovo utente/i });
+  if (await newUserButton.count()) {
+    await newUserButton.click();
+    await page.waitForTimeout(350);
+    await saveCurrentViewport('20-admin-nuovo-utente', 'Finestra aperta senza salvare dati');
+  }
+}
+
+if (!skipPublic) {
+  for (const [route, name] of publicRoutes) await saveViewport(route, name);
+}
 
 await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
 await page.locator('#email').fill(account);
@@ -176,8 +189,18 @@ const detectedRole = detectedPath.startsWith('/admin')
         : null;
 
 if (!detectedRole) throw new Error(`Ruolo non riconosciuto: ${detectedPath}`);
+if (expectedRole && detectedRole !== expectedRole) {
+  throw new Error(`Ruolo errato: atteso ${expectedRole}, rilevato ${detectedRole}`);
+}
+
 for (const [route, name] of roleRoutes[detectedRole]) await saveViewport(route, name);
 if (detectedRole === 'cliente_coaching') await captureCoachingFlow();
+if (detectedRole === 'admin') await captureAdminFlow();
+
+const uniqueConsoleErrors = [...new Set(consoleErrors)];
+const uniqueNetworkErrors = networkErrors.filter((item, index, array) =>
+  array.findIndex((candidate) => candidate.status === item.status && candidate.method === item.method && candidate.url === item.url) === index
+);
 
 await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
   generatedAt: new Date().toISOString(),
@@ -186,11 +209,16 @@ await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
   detectedPath,
   detectedRole,
   screenshots: report,
-  consoleErrors: [...new Set(consoleErrors)],
-  networkErrors: networkErrors.filter((item, index, array) =>
-    array.findIndex((candidate) => candidate.status === item.status && candidate.method === item.method && candidate.url === item.url) === index
-  ),
+  consoleErrors: uniqueConsoleErrors,
+  networkErrors: uniqueNetworkErrors,
 }, null, 2));
 
 await browser.close();
-console.log(`Audit completato: ${report.length} schermate, ruolo ${detectedRole}.`);
+
+const failedRoutes = report.filter((item) => item.status !== 'ok');
+if (failedRoutes.length || uniqueConsoleErrors.length || uniqueNetworkErrors.length) {
+  console.error(JSON.stringify({ failedRoutes, uniqueConsoleErrors, uniqueNetworkErrors }, null, 2));
+  process.exitCode = 1;
+} else {
+  console.log(`Audit completato: ${report.length} schermate, ruolo ${detectedRole}, nessun errore.`);
+}
