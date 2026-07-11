@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { Preferences } from "@capacitor/preferences";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-type UserRole = Database['public']['Enums']['user_role'];
+type UserRole = Database["public"]["Enums"]["user_role"];
 
 interface Profile {
   id: string;
@@ -34,7 +35,25 @@ interface AuthContextType {
   isClienteCorso: boolean;
 }
 
+const PROFILE_CACHE_PREFIX = "spg:auth:profile:";
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+async function readCachedProfile(userId: string): Promise<Profile | null> {
+  const { value } = await Preferences.get({ key: `${PROFILE_CACHE_PREFIX}${userId}` });
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as Profile;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedProfile(profile: Profile) {
+  await Preferences.set({
+    key: `${PROFILE_CACHE_PREFIX}${profile.user_id}`,
+    value: JSON.stringify(profile),
+  });
+}
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -42,82 +61,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const resolveProfile = async (userId: string) => {
+    const cached = await readCachedProfile(userId);
+    if (cached) setProfile(cached);
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return cached;
+    }
+
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+        .from("profiles")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return null;
-      }
-      return data as Profile;
-    } catch (err) {
-      console.error('Error in fetchProfile:', err);
-      return null;
+      if (error) throw error;
+      if (!data) return cached;
+
+      const fresh = data as Profile;
+      setProfile(fresh);
+      await writeCachedProfile(fresh);
+      return fresh;
+    } catch (error) {
+      if (!cached) console.error("Error fetching profile:", error);
+      return cached;
     }
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Defer profile fetch with setTimeout to prevent deadlock
-        if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id).then(setProfile);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-        
-        setLoading(false);
-      }
-    );
+    let mounted = true;
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchProfile(session.user.id).then((p) => {
-          setProfile(p);
-          setLoading(false);
-        });
+    const applySession = async (nextSession: Session | null) => {
+      if (!mounted) return;
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        await resolveProfile(nextSession.user.id);
       } else {
-        setLoading(false);
+        setProfile(null);
       }
+
+      if (mounted) setLoading(false);
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      window.setTimeout(() => void applySession(nextSession), 0);
     });
 
-    return () => subscription.unsubscribe();
+    void supabase.auth.getSession().then(({ data: { session: existingSession } }) => applySession(existingSession));
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   };
 
   const signOut = async () => {
+    const currentUserId = user?.id;
     await supabase.auth.signOut();
+    if (currentUserId) await Preferences.remove({ key: `${PROFILE_CACHE_PREFIX}${currentUserId}` });
     setProfile(null);
   };
 
-  const isAdmin = profile?.role === 'admin';
-  const isCoach = profile?.role === 'coach';
+  const isAdmin = profile?.role === "admin";
+  const isCoach = profile?.role === "coach";
   const isStaff = isAdmin || isCoach;
-  const isClientePalestra = profile?.role === 'cliente_palestra';
-  const isClienteCoaching = profile?.role === 'cliente_coaching';
-  const isClienteCorso = profile?.role === 'cliente_corso';
+  const isClientePalestra = profile?.role === "cliente_palestra";
+  const isClienteCoaching = profile?.role === "cliente_coaching";
+  const isClienteCorso = profile?.role === "cliente_corso";
 
   return (
     <AuthContext.Provider
@@ -143,8 +161,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
