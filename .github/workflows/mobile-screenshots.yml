@@ -49,6 +49,9 @@ jobs:
       - name: Install application dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Test offline synchronization logic
+        run: npm test -- src/lib/offlineSync.test.ts
+
       - name: Install Playwright and WebKit
         run: |
           npm install --no-save --legacy-peer-deps playwright@1.55.0
@@ -110,6 +113,9 @@ jobs:
 
       - name: Install application dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Test offline synchronization logic
+        run: npm test -- src/lib/offlineSync.test.ts
 
       - name: Install Playwright and WebKit
         run: |
