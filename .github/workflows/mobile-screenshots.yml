@@ -25,13 +25,14 @@ permissions:
   contents: read
 
 jobs:
-  capture:
-    name: Capture authenticated iPhone screens
+  capture-client:
+    name: Capture authenticated client iPhone screens
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
       E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_EXPECTED_ROLE: cliente_coaching
       E2E_BASE_URL: http://127.0.0.1:4173
       SCREENSHOT_DIR: build/mobile-screenshots
 
@@ -60,27 +61,89 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/mobile-screenshots
-          npm run preview -- --host 127.0.0.1 --port 4173 > build/preview.log 2>&1 &
-          echo $! > build/preview.pid
+          npm run preview -- --host 127.0.0.1 --port 4173 > build/preview-client.log 2>&1 &
+          echo $! > build/preview-client.pid
           for i in {1..30}; do
             if curl -fsS http://127.0.0.1:4173 >/dev/null; then
               exit 0
             fi
             sleep 1
           done
-          cat build/preview.log
+          cat build/preview-client.log
           exit 1
 
-      - name: Capture all accessible screens
+      - name: Capture client screens
         run: node scripts/capture-mobile-pages.mjs
 
-      - name: Upload screenshots and audit report
+      - name: Upload client screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: super-power-gym-mobile-screenshots
+          name: super-power-gym-client-screenshots
           path: |
             build/mobile-screenshots
-            build/preview.log
+            build/preview-client.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  capture-admin:
+    name: Capture authenticated admin iPhone screens
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_EMAIL: ${{ secrets.ADMINPSW }}
+      E2E_PASSWORD: ${{ secrets.ADMINPASS }}
+      E2E_EXPECTED_ROLE: admin
+      E2E_SKIP_PUBLIC: "1"
+      E2E_BASE_URL: http://127.0.0.1:4173
+      SCREENSHOT_DIR: build/admin-screenshots
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install Playwright and WebKit
+        run: |
+          npm install --no-save --legacy-peer-deps playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start preview server
+        shell: bash
+        run: |
+          mkdir -p build/admin-screenshots
+          npm run preview -- --host 127.0.0.1 --port 4173 > build/preview-admin.log 2>&1 &
+          echo $! > build/preview-admin.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat build/preview-admin.log
+          exit 1
+
+      - name: Capture and validate admin screens
+        run: node scripts/capture-mobile-pages.mjs
+
+      - name: Upload admin screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: super-power-gym-admin-screenshots
+          path: |
+            build/admin-screenshots
+            build/preview-admin.log
           if-no-files-found: warn
           retention-days: 14
