@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserManagement from "./pages/admin/UserManagement";
+import NewUserManagementPage from "./pages/admin/NewUserManagementPage";
 import ClientDetailPage from "./pages/admin/ClientDetailPage";
 import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
 import CalendarManagement from "./pages/admin/CalendarManagement";
@@ -57,7 +58,7 @@ const App = () => (
 
             <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/utenti" element={<ProtectedRoute allowedRoles={["admin"]}><UserManagement /></ProtectedRoute>} />
-            <Route path="/admin/utenti/nuovo" element={<ProtectedRoute allowedRoles={["admin"]}><UserManagement /></ProtectedRoute>} />
+            <Route path="/admin/utenti/nuovo" element={<ProtectedRoute allowedRoles={["admin"]}><NewUserManagementPage /></ProtectedRoute>} />
             <Route path="/admin/utenti/:userId" element={<ProtectedRoute allowedRoles={["admin"]}><ClientDetailPage /></ProtectedRoute>} />
             <Route path="/admin/utenti/:userId/scheda/nuova" element={<ProtectedRoute allowedRoles={["admin"]}><WorkoutPlanEditor /></ProtectedRoute>} />
             <Route path="/admin/utenti/:userId/scheda/:planId/modifica" element={<ProtectedRoute allowedRoles={["admin"]}><WorkoutPlanEditor /></ProtectedRoute>} />
