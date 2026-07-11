@@ -87,7 +87,7 @@ describe("offline synchronization queue", () => {
     expect(pending[0].payload.clientNotes).toBe("Nota aggiornata");
   });
 
-  it("queues a report offline and sends it once after reconnect", async () => {
+  it("uses a stable database id for offline reports and sends them once", async () => {
     const sync = await import("./offlineSync");
 
     const queued = await sync.queueErrorReport({
@@ -103,6 +103,7 @@ describe("offline synchronization queue", () => {
     await sync.flushPendingOperations();
 
     expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ id: "report-local-1" }));
     expect(sync.getOfflineSnapshot().pendingCount).toBe(0);
   });
 });
