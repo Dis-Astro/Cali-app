@@ -1,7 +1,7 @@
 import { Preferences } from "@capacitor/preferences";
 import { supabase } from "@/integrations/supabase/client";
 
-const STORAGE_VERSION = "v1";
+const STORAGE_VERSION = "v2";
 const QUEUE_KEY = `spg:offline:${STORAGE_VERSION}:queue`;
 const META_KEY = `spg:offline:${STORAGE_VERSION}:meta`;
 const CACHE_PREFIX = `spg:offline:${STORAGE_VERSION}:cache:`;
@@ -23,23 +23,39 @@ export interface WorkoutCompletionPayload {
   difficultyRating: number;
 }
 
-interface PendingWorkoutCompletion {
+export interface ErrorReportPayload {
+  clientId: string;
+  coachId: string;
+  title: string;
+  description: string;
+  localId: string;
+}
+
+interface PendingBase {
   id: string;
-  type: "workout_completion";
   dedupeKey: string;
   createdAt: string;
   updatedAt: string;
   attempts: number;
+}
+
+export interface PendingWorkoutCompletion extends PendingBase {
+  type: "workout_completion";
   payload: WorkoutCompletionPayload;
 }
 
-type PendingOperation = PendingWorkoutCompletion;
+export interface PendingErrorReport extends PendingBase {
+  type: "error_report";
+  payload: ErrorReportPayload;
+}
 
+type PendingOperation = PendingWorkoutCompletion | PendingErrorReport;
 type Listener = (snapshot: OfflineSnapshot) => void;
 
 const listeners = new Set<Listener>();
 let initialized = false;
 let flushPromise: Promise<void> | null = null;
+let retryTimer: number | null = null;
 let snapshot: OfflineSnapshot = {
   isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   isSyncing: false,
@@ -86,8 +102,12 @@ async function writeMeta() {
   });
 }
 
-function getDedupeKey(payload: WorkoutCompletionPayload) {
+function workoutDedupeKey(payload: WorkoutCompletionPayload) {
   return `workout_completion:${payload.clientId}:${payload.workoutPlanExerciseId}:${payload.weekNumber}`;
+}
+
+function reportDedupeKey(payload: ErrorReportPayload) {
+  return `error_report:${payload.clientId}:${payload.localId}`;
 }
 
 async function syncWorkoutCompletion(operation: PendingWorkoutCompletion) {
@@ -116,7 +136,6 @@ async function syncWorkoutCompletion(operation: PendingWorkoutCompletion) {
       })
       .eq("id", completionId)
       .eq("client_id", payload.clientId);
-
     if (error) throw error;
     return;
   }
@@ -128,13 +147,32 @@ async function syncWorkoutCompletion(operation: PendingWorkoutCompletion) {
     client_notes: payload.clientNotes,
     difficulty_rating: payload.difficultyRating,
   });
-
   if (error) throw error;
 }
 
-async function refreshOnlineState() {
+async function syncErrorReport(operation: PendingErrorReport) {
+  const payload = operation.payload;
+  const { error } = await supabase.from("error_reports").insert({
+    client_id: payload.clientId,
+    coach_id: payload.coachId,
+    title: payload.title,
+    description: payload.description,
+    status: "aperta",
+  });
+  if (error) throw error;
+}
+
+function updateOnlineState() {
   snapshot.isOnline = typeof navigator === "undefined" ? true : navigator.onLine;
   emit();
+}
+
+function scheduleRetry() {
+  if (typeof window === "undefined" || retryTimer !== null) return;
+  retryTimer = window.setTimeout(() => {
+    retryTimer = null;
+    if (navigator.onLine && snapshot.pendingCount > 0) void flushPendingOperations();
+  }, 30000);
 }
 
 export async function initializeOfflineSync() {
@@ -144,7 +182,7 @@ export async function initializeOfflineSync() {
   const queue = await readQueue();
   snapshot.pendingCount = queue.length;
   await readMeta();
-  await refreshOnlineState();
+  updateOnlineState();
 
   if (typeof window !== "undefined") {
     window.addEventListener("online", () => {
@@ -160,9 +198,11 @@ export async function initializeOfflineSync() {
       emit();
     });
 
-    window.setInterval(() => {
-      if (navigator.onLine && snapshot.pendingCount > 0) void flushPendingOperations();
-    }, 30000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && navigator.onLine && snapshot.pendingCount > 0) {
+        void flushPendingOperations();
+      }
+    });
   }
 
   if (snapshot.isOnline && queue.length > 0) void flushPendingOperations();
@@ -201,36 +241,53 @@ export async function getPendingWorkoutCompletions(clientId: string) {
     .filter((operation) => operation.payload.clientId === clientId);
 }
 
-export async function queueWorkoutCompletion(payload: WorkoutCompletionPayload) {
+async function enqueue(operation: PendingOperation) {
   const queue = await readQueue();
-  const now = new Date().toISOString();
-  const dedupeKey = getDedupeKey(payload);
-  const existingIndex = queue.findIndex((operation) => operation.dedupeKey === dedupeKey);
-
-  const operation: PendingWorkoutCompletion = {
-    id: existingIndex >= 0 ? queue[existingIndex].id : `${dedupeKey}:${Date.now()}`,
-    type: "workout_completion",
-    dedupeKey,
-    createdAt: existingIndex >= 0 ? queue[existingIndex].createdAt : now,
-    updatedAt: now,
-    attempts: existingIndex >= 0 ? queue[existingIndex].attempts : 0,
-    payload,
-  };
-
-  if (existingIndex >= 0) queue[existingIndex] = operation;
-  else queue.push(operation);
-
+  const existingIndex = queue.findIndex((item) => item.dedupeKey === operation.dedupeKey);
+  if (existingIndex >= 0) {
+    operation.id = queue[existingIndex].id;
+    operation.createdAt = queue[existingIndex].createdAt;
+    operation.attempts = queue[existingIndex].attempts;
+    queue[existingIndex] = operation;
+  } else {
+    queue.push(operation);
+  }
   await writeQueue(queue);
 
-  if (typeof navigator === "undefined" || navigator.onLine) {
-    await flushPendingOperations();
-  }
-
+  if (typeof navigator === "undefined" || navigator.onLine) await flushPendingOperations();
   const remaining = await readQueue();
   return {
-    synced: !remaining.some((item) => item.dedupeKey === dedupeKey),
+    synced: !remaining.some((item) => item.dedupeKey === operation.dedupeKey),
     pendingCount: remaining.length,
   };
+}
+
+export async function queueWorkoutCompletion(payload: WorkoutCompletionPayload) {
+  const now = new Date().toISOString();
+  const dedupeKey = workoutDedupeKey(payload);
+  return enqueue({
+    id: `${dedupeKey}:${Date.now()}`,
+    type: "workout_completion",
+    dedupeKey,
+    createdAt: now,
+    updatedAt: now,
+    attempts: 0,
+    payload,
+  });
+}
+
+export async function queueErrorReport(payload: ErrorReportPayload) {
+  const now = new Date().toISOString();
+  const dedupeKey = reportDedupeKey(payload);
+  return enqueue({
+    id: `${dedupeKey}:${Date.now()}`,
+    type: "error_report",
+    dedupeKey,
+    createdAt: now,
+    updatedAt: now,
+    attempts: 0,
+    payload,
+  });
 }
 
 export async function flushPendingOperations() {
@@ -251,9 +308,8 @@ export async function flushPendingOperations() {
 
     for (const operation of [...queue]) {
       try {
-        if (operation.type === "workout_completion") {
-          await syncWorkoutCompletion(operation);
-        }
+        if (operation.type === "workout_completion") await syncWorkoutCompletion(operation);
+        if (operation.type === "error_report") await syncErrorReport(operation);
 
         queue = queue.filter((item) => item.id !== operation.id);
         await writeQueue(queue);
@@ -263,6 +319,7 @@ export async function flushPendingOperations() {
         queue = queue.map((item) => (item.id === operation.id ? operation : item));
         await writeQueue(queue);
         snapshot.lastError = error instanceof Error ? error.message : "Sincronizzazione non riuscita";
+        scheduleRetry();
         break;
       }
     }
