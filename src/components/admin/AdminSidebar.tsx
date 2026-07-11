@@ -49,7 +49,8 @@ const AdminSidebar = ({ isOpen, onClose, showBackLink = false }: AdminSidebarPro
   return (
     <>
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-sidebar-border bg-sidebar-background transition-transform duration-300 lg:static lg:translate-x-0 ${
+        style={{ backgroundColor: "hsl(var(--sidebar-background))" }}
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-sidebar-border shadow-2xl shadow-black/70 transition-transform duration-300 lg:static lg:w-64 lg:translate-x-0 lg:shadow-none ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -88,7 +89,7 @@ const AdminSidebar = ({ isOpen, onClose, showBackLink = false }: AdminSidebarPro
                   to={item.href}
                   onClick={onClose}
                   aria-current={active ? "page" : undefined}
-                  className={`flex items-center gap-3 rounded-sm px-4 py-3 transition-colors ${
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${
                     active
                       ? "bg-sidebar-accent text-sidebar-primary"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -122,7 +123,7 @@ const AdminSidebar = ({ isOpen, onClose, showBackLink = false }: AdminSidebarPro
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-background/80 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/90 backdrop-blur-[2px] lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
