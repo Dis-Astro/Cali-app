@@ -153,13 +153,14 @@ async function syncWorkoutCompletion(operation: PendingWorkoutCompletion) {
 async function syncErrorReport(operation: PendingErrorReport) {
   const payload = operation.payload;
   const { error } = await supabase.from("error_reports").insert({
+    id: payload.localId,
     client_id: payload.clientId,
     coach_id: payload.coachId,
     title: payload.title,
     description: payload.description,
     status: "aperta",
   });
-  if (error) throw error;
+  if (error && error.code !== "23505") throw error;
 }
 
 function updateOnlineState() {
