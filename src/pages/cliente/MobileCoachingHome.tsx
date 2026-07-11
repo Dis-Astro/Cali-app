@@ -5,7 +5,9 @@ import { it } from "date-fns/locale";
 import { CalendarDays, Clock, CreditCard, Dumbbell, Play, TrendingUp, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { getOfflineCache, setOfflineCache } from "@/lib/offlineSync";
 import ClientLayout from "@/components/coaching/ClientLayout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,102 +15,143 @@ import { Progress } from "@/components/ui/progress";
 type Plan = { id: string; name: string; description: string | null; end_date: string; coach_id: string };
 type Appointment = { id: string; title: string; start_time: string; location: string | null };
 type Subscription = { end_date: string; plan_name: string };
+type HomeSnapshot = {
+  plan: Plan | null;
+  appointment: Appointment | null;
+  subscription: Subscription | null;
+  coachName: string;
+  progress: number;
+};
+
+const EMPTY_HOME: HomeSnapshot = {
+  plan: null,
+  appointment: null,
+  subscription: null,
+  coachName: "Non assegnato",
+  progress: 0,
+};
 
 const MobileCoachingHome = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const [appointment, setAppointment] = useState<Appointment | null>(null);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [coachName, setCoachName] = useState("Non assegnato");
-  const [progress, setProgress] = useState(0);
+  const [snapshot, setSnapshot] = useState<HomeSnapshot>(EMPTY_HOME);
+  const [fromCache, setFromCache] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       if (!profile?.user_id) return;
       setLoading(true);
-      const now = new Date().toISOString();
+      const cacheKey = `coaching-home:${profile.user_id}`;
+      const cached = await getOfflineCache<HomeSnapshot>(cacheKey);
 
-      const { data: plans } = await supabase
-        .from("workout_plans")
-        .select("id, name, description, end_date, coach_id")
-        .eq("client_id", profile.user_id)
-        .is("deleted_at" as any, null)
-        .lte("start_date", now)
-        .gte("end_date", now)
-        .order("created_at", { ascending: false })
-        .limit(1);
+      if (cached) {
+        setSnapshot(cached.value);
+        setFromCache(true);
+      }
 
-      const currentPlan = (plans?.[0] || null) as Plan | null;
-      setPlan(currentPlan);
+      if (!navigator.onLine) {
+        setLoading(false);
+        return;
+      }
 
-      if (currentPlan) {
-        const { data: coach } = await supabase
-          .from("profiles")
-          .select("first_name, last_name")
-          .eq("user_id", currentPlan.coach_id)
-          .maybeSingle();
-        if (coach) setCoachName(`${coach.first_name} ${coach.last_name}`);
+      try {
+        const now = new Date().toISOString();
+        const next: HomeSnapshot = { ...EMPTY_HOME };
 
-        const { data: exercises } = await supabase
-          .from("workout_plan_exercises")
-          .select("id")
-          .eq("workout_plan_id", currentPlan.id);
+        const { data: plans, error: planError } = await supabase
+          .from("workout_plans")
+          .select("id, name, description, end_date, coach_id")
+          .eq("client_id", profile.user_id)
+          .is("deleted_at" as any, null)
+          .lte("start_date", now)
+          .gte("end_date", now)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (planError) throw planError;
 
-        if (exercises?.length) {
-          const { data: done } = await supabase
-            .from("workout_completions")
-            .select("workout_plan_exercise_id")
-            .eq("client_id", profile.user_id)
-            .in("workout_plan_exercise_id", exercises.map((exercise) => exercise.id));
-          const completed = new Set((done || []).map((item) => item.workout_plan_exercise_id)).size;
-          setProgress(Math.min(100, Math.round((completed / exercises.length) * 100)));
+        next.plan = (plans?.[0] || null) as Plan | null;
+
+        if (next.plan) {
+          const { data: coach, error: coachError } = await supabase
+            .from("profiles")
+            .select("first_name, last_name")
+            .eq("user_id", next.plan.coach_id)
+            .maybeSingle();
+          if (coachError) throw coachError;
+          if (coach) next.coachName = `${coach.first_name} ${coach.last_name}`;
+
+          const { data: exercises, error: exerciseError } = await supabase
+            .from("workout_plan_exercises")
+            .select("id")
+            .eq("workout_plan_id", next.plan.id);
+          if (exerciseError) throw exerciseError;
+
+          if (exercises?.length) {
+            const { data: done, error: doneError } = await supabase
+              .from("workout_completions")
+              .select("workout_plan_exercise_id")
+              .eq("client_id", profile.user_id)
+              .in("workout_plan_exercise_id", exercises.map((exercise) => exercise.id));
+            if (doneError) throw doneError;
+            const completed = new Set((done || []).map((item) => item.workout_plan_exercise_id)).size;
+            next.progress = Math.min(100, Math.round((completed / exercises.length) * 100));
+          }
         }
+
+        const { data: appointments, error: appointmentError } = await supabase
+          .from("appointments")
+          .select("id, title, start_time, location")
+          .eq("client_id", profile.user_id)
+          .gte("start_time", now)
+          .order("start_time")
+          .limit(1);
+        if (appointmentError) throw appointmentError;
+        next.appointment = (appointments?.[0] || null) as Appointment | null;
+
+        const { data: subscriptions, error: subscriptionError } = await supabase
+          .from("subscriptions")
+          .select("end_date, plan:membership_plans(name)")
+          .eq("user_id", profile.user_id)
+          .eq("status", "attivo")
+          .order("end_date", { ascending: false })
+          .limit(1);
+        if (subscriptionError) throw subscriptionError;
+
+        if (subscriptions?.[0]) {
+          next.subscription = {
+            end_date: subscriptions[0].end_date,
+            plan_name: (subscriptions[0].plan as any)?.name || "Abbonamento",
+          };
+        }
+
+        setSnapshot(next);
+        setFromCache(false);
+        await setOfflineCache(cacheKey, next);
+      } catch {
+        if (!cached) setSnapshot(EMPTY_HOME);
+      } finally {
+        setLoading(false);
       }
-
-      const { data: appointments } = await supabase
-        .from("appointments")
-        .select("id, title, start_time, location")
-        .eq("client_id", profile.user_id)
-        .gte("start_time", now)
-        .order("start_time")
-        .limit(1);
-      setAppointment((appointments?.[0] || null) as Appointment | null);
-
-      const { data: subscriptions } = await supabase
-        .from("subscriptions")
-        .select("end_date, plan:membership_plans(name)")
-        .eq("user_id", profile.user_id)
-        .eq("status", "attivo")
-        .order("end_date", { ascending: false })
-        .limit(1);
-
-      if (subscriptions?.[0]) {
-        setSubscription({
-          end_date: subscriptions[0].end_date,
-          plan_name: (subscriptions[0].plan as any)?.name || "Abbonamento",
-        });
-      }
-
-      setLoading(false);
     };
 
-    load();
+    void load();
   }, [profile?.user_id]);
 
+  const { plan, appointment, subscription, coachName, progress } = snapshot;
   const planDays = plan ? differenceInDays(new Date(plan.end_date), new Date()) : null;
   const subscriptionDays = subscription ? differenceInDays(new Date(subscription.end_date), new Date()) : null;
 
   return (
     <ClientLayout title="HOME">
-      {loading ? (
-        <div className="grid min-h-[60vh] place-items-center">
-          <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
+      {loading && !fromCache ? (
+        <div className="grid min-h-[60vh] place-items-center"><div className="h-9 w-9 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
       ) : (
         <div className="mx-auto max-w-2xl space-y-4">
           <section>
-            <p className="text-sm text-muted-foreground">Ciao {profile?.first_name || "atleta"}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-muted-foreground">Ciao {profile?.first_name || "atleta"}</p>
+              {fromCache && <Badge variant="outline">Dati offline</Badge>}
+            </div>
             <h2 className="mt-1 font-display text-3xl tracking-wide">IL TUO PERCORSO</h2>
           </section>
 
@@ -122,9 +165,7 @@ const MobileCoachingHome = () => {
                 </div>
                 {planDays !== null && <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs">{planDays > 0 ? `${planDays} gg` : "Scaduta"}</span>}
               </div>
-              <Link to="/coaching/scheda" className="mt-5 block">
-                <Button className="h-12 w-full rounded-2xl gap-2 font-semibold"><Play className="h-5 w-5 fill-current" />Vedi scheda</Button>
-              </Link>
+              <Link to="/coaching/scheda" className="mt-5 block"><Button className="h-12 w-full gap-2 rounded-2xl font-semibold"><Play className="h-5 w-5 fill-current" />Vedi scheda</Button></Link>
             </CardContent>
           </Card>
 
@@ -137,7 +178,7 @@ const MobileCoachingHome = () => {
 
           <Card className="rounded-3xl"><CardContent className="flex items-center gap-4 p-5"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CreditCard className="h-5 w-5" /></div><div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">Abbonamento</p><p className="break-words font-medium">{subscription?.plan_name || "Non disponibile"}</p></div>{subscriptionDays !== null && <span className="shrink-0 text-xs text-muted-foreground">{subscriptionDays > 0 ? `${subscriptionDays} gg` : "Scaduto"}</span>}</CardContent></Card>
 
-          <Link to="/coaching/scheda" className="block"><Button variant="secondary" className="h-12 w-full rounded-2xl gap-2"><Dumbbell className="h-4 w-4" />Apri allenamento</Button></Link>
+          <Link to="/coaching/scheda" className="block"><Button variant="secondary" className="h-12 w-full gap-2 rounded-2xl"><Dumbbell className="h-4 w-4" />Apri allenamento</Button></Link>
         </div>
       )}
     </ClientLayout>
