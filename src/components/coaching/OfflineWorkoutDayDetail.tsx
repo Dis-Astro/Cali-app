@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import LightningRating from "./LightningRating";
+import WorkoutTimerLauncher from "@/features/workout-timer/WorkoutTimerLauncher";
 
 type Plan = { id: string; name: string; start_date: string; end_date: string };
 type Video = { id: string; title: string; video_url: string };
@@ -336,6 +337,9 @@ const OfflineWorkoutDayDetail = () => {
                     )}
                   </CardContent>
                 </CollapsibleContent>
+                <div className="flex justify-end border-t border-border/60 bg-card/80 px-3 py-2">
+                  <WorkoutTimerLauncher exerciseName={exercise.exercise_name} />
+                </div>
               </Card>
             </Collapsible>
           );
