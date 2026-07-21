@@ -9,6 +9,7 @@ export interface WorkoutTimerConfig {
   workSeconds: number;
   restSeconds: number;
   rounds: number;
+  emomOpenEnded: boolean;
   silent: boolean;
 }
 
@@ -19,6 +20,7 @@ export interface WorkoutTimerSnapshot {
   overallRemainingMs: number | null;
   round: number;
   totalRounds: number | null;
+  isLastRound: boolean;
   phase: "ready" | "work" | "rest" | "finished";
   finished: boolean;
 }
@@ -30,6 +32,7 @@ export const DEFAULT_TIMER_CONFIG: WorkoutTimerConfig = {
   workSeconds: 20,
   restSeconds: 10,
   rounds: 8,
+  emomOpenEnded: false,
   silent: false,
 };
 

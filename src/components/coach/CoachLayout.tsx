@@ -9,7 +9,8 @@ import {
   Menu,
   X,
   ClipboardList,
-  MessageSquare
+  MessageSquare,
+  Mic,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -25,6 +26,7 @@ const navigationItems = [
   { icon: Dumbbell, label: "Schede Allenamento", href: "/coach/schede" },
   { icon: Calendar, label: "Calendario", href: "/coach/calendario" },
   { icon: MessageSquare, label: "Feedback Clienti", href: "/coach/segnalazioni" },
+  { icon: Mic, label: "Audio Timer", href: "/coach/audio-timer" },
 ];
 
 const CoachLayout = ({ children, title, icon }: CoachLayoutProps) => {

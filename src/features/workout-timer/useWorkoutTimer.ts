@@ -76,6 +76,14 @@ export function useWorkoutTimer(config: WorkoutTimerConfig) {
     void releaseWakeLock();
   }, [releaseWakeLock]);
 
+  const finish = useCallback(() => {
+    accumulatedRef.current = calculateElapsed();
+    startedAtRef.current = null;
+    setElapsedMs(accumulatedRef.current);
+    setStatus("finished");
+    void releaseWakeLock();
+  }, [calculateElapsed, releaseWakeLock]);
+
   const snapshot = useMemo(() => getTimerSnapshot(config, elapsedMs), [config, elapsedMs]);
 
   useEffect(() => {
@@ -107,5 +115,5 @@ export function useWorkoutTimer(config: WorkoutTimerConfig) {
 
   useEffect(() => () => { void releaseWakeLock(); }, [releaseWakeLock]);
 
-  return { status, snapshot, start, pause, resume, reset };
+  return { status, snapshot, start, pause, resume, finish, reset };
 }

@@ -7,6 +7,7 @@ export function getTimerTotalMs(config: WorkoutTimerConfig): number | null {
     case "stopwatch":
       return null;
     case "emom":
+      if (config.emomOpenEnded) return null;
       return secondsToMs(config.intervalSeconds) * Math.max(1, config.rounds);
     case "tabata":
       return (
@@ -32,6 +33,7 @@ export function getTimerSnapshot(config: WorkoutTimerConfig, rawElapsedMs: numbe
       overallRemainingMs: 0,
       round: Math.max(1, config.rounds),
       totalRounds: config.mode === "emom" || config.mode === "tabata" ? Math.max(1, config.rounds) : null,
+      isLastRound: config.mode === "emom" || config.mode === "tabata",
       phase: "finished",
       finished: true,
     };
@@ -45,6 +47,7 @@ export function getTimerSnapshot(config: WorkoutTimerConfig, rawElapsedMs: numbe
       overallRemainingMs: null,
       round: 1,
       totalRounds: null,
+      isLastRound: false,
       phase: "work",
       finished: false,
     };
@@ -53,13 +56,15 @@ export function getTimerSnapshot(config: WorkoutTimerConfig, rawElapsedMs: numbe
   if (config.mode === "emom") {
     const intervalMs = secondsToMs(config.intervalSeconds);
     const round = Math.floor(elapsedMs / intervalMs) + 1;
+    const totalRounds = config.emomOpenEnded ? null : Math.max(1, config.rounds);
     return {
       elapsedMs,
       totalMs,
       mainRemainingMs: intervalMs - (elapsedMs % intervalMs),
-      overallRemainingMs: Math.max(0, totalMs! - elapsedMs),
+      overallRemainingMs: totalMs === null ? null : Math.max(0, totalMs - elapsedMs),
       round,
-      totalRounds: Math.max(1, config.rounds),
+      totalRounds,
+      isLastRound: totalRounds !== null && round === totalRounds,
       phase: "work",
       finished: false,
     };
@@ -80,6 +85,7 @@ export function getTimerSnapshot(config: WorkoutTimerConfig, rawElapsedMs: numbe
       overallRemainingMs: Math.max(0, totalMs! - elapsedMs),
       round: Math.min(completedCycles + 1, Math.max(1, config.rounds)),
       totalRounds: Math.max(1, config.rounds),
+      isLastRound: completedCycles + 1 === Math.max(1, config.rounds),
       phase: isWork ? "work" : "rest",
       finished: false,
     };
@@ -92,6 +98,7 @@ export function getTimerSnapshot(config: WorkoutTimerConfig, rawElapsedMs: numbe
     overallRemainingMs: Math.max(0, totalMs! - elapsedMs),
     round: 1,
     totalRounds: null,
+    isLastRound: false,
     phase: "work",
     finished: false,
   };

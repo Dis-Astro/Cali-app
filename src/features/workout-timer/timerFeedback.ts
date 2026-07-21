@@ -13,7 +13,9 @@ export async function unlockTimerAudio() {
   if (context?.state === "suspended") await context.resume();
 }
 
-export function playTimerTone(kind: "tick" | "phase" | "finish", silent: boolean) {
+export type TimerToneKind = "tick" | "start" | "phase" | "half" | "last" | "finish";
+
+export function playTimerTone(kind: TimerToneKind, silent: boolean) {
   if (silent) return;
   const context = getAudioContext();
   if (!context || context.state !== "running") return;
@@ -21,9 +23,17 @@ export function playTimerTone(kind: "tick" | "phase" | "finish", silent: boolean
   const oscillator = context.createOscillator();
   const gain = context.createGain();
   const now = context.currentTime;
-  const duration = kind === "finish" ? 0.45 : 0.16;
+  const duration = kind === "finish" ? 0.55 : kind === "half" || kind === "last" ? 0.32 : 0.16;
   oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(kind === "tick" ? 720 : kind === "phase" ? 940 : 1180, now);
+  const frequency = {
+    tick: 720,
+    start: 1040,
+    phase: 940,
+    half: 820,
+    last: 1080,
+    finish: 1180,
+  }[kind];
+  oscillator.frequency.setValueAtTime(frequency, now);
   gain.gain.setValueAtTime(0.0001, now);
   gain.gain.exponentialRampToValueAtTime(0.18, now + 0.015);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
@@ -33,6 +43,18 @@ export function playTimerTone(kind: "tick" | "phase" | "finish", silent: boolean
   oscillator.stop(now + duration);
 
   if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-    navigator.vibrate(kind === "finish" ? [180, 90, 180] : 80);
+    navigator.vibrate(kind === "finish" ? [180, 90, 180] : kind === "half" || kind === "last" ? [100, 60, 100] : 80);
   }
+}
+
+export function speakTimerMessage(message: string, silent: boolean) {
+  if (silent || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = "it-IT";
+  utterance.rate = 0.94;
+  utterance.pitch = 0.98;
+  const italianVoices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith("it"));
+  utterance.voice = italianVoices.find((voice) => /alice|elsa|isabella|google.*ital/i.test(voice.name)) ?? italianVoices[0] ?? null;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
 }
