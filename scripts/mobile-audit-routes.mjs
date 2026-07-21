@@ -17,6 +17,7 @@ export const roleRoutes = {
     ['/admin/spese', '18-admin-spese'],
     ['/admin/andamento-struttura', '19-admin-andamento'],
     ['/admin/utenti/nuovo', '20-admin-nuovo-utente-dialog'],
+    ['/admin/audio-timer', '21-admin-audio-timer'],
   ],
   coach: [
     ['/coach', '20-coach-dashboard'],
@@ -24,6 +25,7 @@ export const roleRoutes = {
     ['/coach/schede', '22-coach-schede'],
     ['/coach/calendario', '23-coach-calendario'],
     ['/coach/segnalazioni', '24-coach-segnalazioni'],
+    ['/coach/audio-timer', '25-coach-audio-timer'],
   ],
   cliente_coaching: [
     ['/coaching', '30-coaching-dashboard'],

@@ -25,6 +25,7 @@ import MembershipPlanManagement from "./pages/admin/MembershipPlanManagement";
 import AdminReportsPage from "./pages/admin/AdminReportsPage";
 import StructurePerformancePage from "./pages/admin/StructurePerformancePage";
 import ExpensesManagement from "./pages/admin/ExpensesManagement";
+import TimerAudioManagement from "./pages/shared/TimerAudioManagement";
 
 import CoachDashboard from "./pages/coach/CoachDashboard";
 import CoachClientsPage from "./pages/coach/CoachClientsPage";
@@ -70,12 +71,14 @@ const App = () => (
             <Route path="/admin/segnalazioni" element={<ProtectedRoute allowedRoles={["admin"]}><AdminReportsPage /></ProtectedRoute>} />
             <Route path="/admin/andamento-struttura" element={<ProtectedRoute allowedRoles={["admin"]}><StructurePerformancePage /></ProtectedRoute>} />
             <Route path="/admin/spese" element={<ProtectedRoute allowedRoles={["admin"]}><ExpensesManagement /></ProtectedRoute>} />
+            <Route path="/admin/audio-timer" element={<ProtectedRoute allowedRoles={["admin"]}><TimerAudioManagement /></ProtectedRoute>} />
 
             <Route path="/coach" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachDashboard /></ProtectedRoute>} />
             <Route path="/coach/clienti" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachClientsPage /></ProtectedRoute>} />
             <Route path="/coach/schede" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachWorkoutsPage /></ProtectedRoute>} />
             <Route path="/coach/calendario" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachCalendarPage /></ProtectedRoute>} />
             <Route path="/coach/segnalazioni" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachReportsPage /></ProtectedRoute>} />
+            <Route path="/coach/audio-timer" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><TimerAudioManagement /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachDashboard /></ProtectedRoute>} />
 
             <Route path="/palestra" element={<ProtectedRoute allowedRoles={["cliente_palestra", "cliente_corso"]}><PalestraDashboard /></ProtectedRoute>} />

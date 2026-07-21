@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Search, Loader2, Trash2, Edit, Eye } from "lucide-react";
+import { Users, UserPlus, Search, Loader2, Trash2, Edit, Eye, Phone, CalendarDays } from "lucide-react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -80,11 +80,7 @@ const UserManagement = () => {
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("profiles")
@@ -97,7 +93,11 @@ const UserManagement = () => {
       setUsers(data || []);
     }
     setLoading(false);
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
 
   const createUser = async () => {
     if (!newUser.email || !newUser.password || !newUser.first_name || !newUser.last_name) {
@@ -130,8 +130,8 @@ const UserManagement = () => {
       setNewUser({ email: "", password: "", first_name: "", last_name: "", role: "cliente_palestra", phone: "", address: "", date_of_birth: "", fiscal_code: "", emergency_contact: "" });
       setIsCreateDialogOpen(false);
       fetchUsers();
-    } catch (error: any) {
-      toast({ title: "Errore", description: error.message || "Impossibile creare l'utente", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Errore", description: error instanceof Error ? error.message : "Impossibile creare l'utente", variant: "destructive" });
     }
     setCreating(false);
   };
@@ -307,7 +307,37 @@ const UserManagement = () => {
               <p>Nessun utente trovato</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="space-y-3 md:hidden">
+              {filteredUsers.map((user) => (
+                <article key={user.id} className="rounded-2xl border border-border bg-card p-4">
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => navigate(`/admin/utenti/${user.user_id}`)}
+                    aria-label={`Apri ${user.first_name} ${user.last_name}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words text-base font-semibold">{user.first_name} {user.last_name}</p>
+                        <Badge variant={roleBadgeVariant[user.role]} className="mt-2">{roleLabels[user.role]}</Badge>
+                      </div>
+                      <Eye className="h-5 w-5 shrink-0 text-primary" />
+                    </div>
+                    <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{user.phone || "Telefono non indicato"}</span>
+                      <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />Registrato il {new Date(user.created_at).toLocaleDateString("it-IT")}</span>
+                    </div>
+                  </button>
+                  <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
+                    <Button variant="secondary" size="sm" onClick={() => navigate(`/admin/utenti/${user.user_id}`)}><Eye className="mr-1.5 h-4 w-4" />Apri</Button>
+                    <Button variant="outline" size="sm" onClick={() => openEditDialog(user)}><Edit className="mr-1.5 h-4 w-4" />Modifica</Button>
+                    <Button variant="outline" size="sm" onClick={() => setDeleteUserId(user.id)} disabled={user.role === "admin"} aria-label={`Elimina ${user.first_name} ${user.last_name}`}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -363,6 +393,7 @@ const UserManagement = () => {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

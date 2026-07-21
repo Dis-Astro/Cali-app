@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { addDays, format, isSameDay, parseISO, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, CreditCard, Dumbbell, MapPin, Plus, User } from "lucide-react";
@@ -63,19 +63,22 @@ const MobileAdminCalendar = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [agendaFilter, setAgendaFilter] = useState<"all" | "appointments" | "courses" | "deadlines">("all");
   const [form, setForm] = useState({ title: "", start: "09:00", end: "10:00", clientId: "", coachId: "", location: "" });
 
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart.getTime()]);
+  const weekStartKey = weekStart.getTime();
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const start = format(weekStart, "yyyy-MM-dd");
-    const end = format(addDays(weekStart, 8), "yyyy-MM-dd");
+    const currentWeekStart = new Date(weekStartKey);
+    const start = format(currentWeekStart, "yyyy-MM-dd");
+    const end = format(addDays(currentWeekStart, 8), "yyyy-MM-dd");
     const [appointmentsRes, sessionsRes, deadlinesRes, subscriptionsRes, clientsRes, coachesRes] = await Promise.all([
       supabase.from("appointments").select("id,title,start_time,end_time,client_id,coach_id,location,color").gte("start_time", start).lt("start_time", end).order("start_time"),
       supabase.from("course_sessions").select("id,start_time,end_time,course:courses(name,color)").gte("start_time", start).lt("start_time", end).order("start_time"),
-      (supabase.from("workout_plans").select("id,client_id,end_date,name").gte("end_date", start).lt("end_date", end) as any).is("deleted_at", null),
+      supabase.from("workout_plans").select("id,client_id,end_date,name").gte("end_date", start).lt("end_date", end).is("deleted_at" as never, null),
       supabase.from("subscriptions").select("id,user_id,end_date,membership_plans(name)").gte("end_date", start).lt("end_date", end),
       supabase.from("profiles").select("user_id,first_name,last_name").in("role", ["cliente_palestra", "cliente_coaching", "cliente_corso"]).order("last_name"),
       supabase.from("profiles").select("user_id,first_name,last_name").in("role", ["admin", "coach"]).order("last_name"),
@@ -88,11 +91,11 @@ const MobileAdminCalendar = () => {
     setCoaches((coachesRes.data || []) as Profile[]);
     setForm((current) => ({ ...current, coachId: current.coachId || profile?.user_id || "" }));
     setLoading(false);
-  };
+  }, [profile?.user_id, weekStartKey]);
 
   useEffect(() => {
     void load();
-  }, [weekStart.getTime()]);
+  }, [load]);
 
   const clientName = (id: string | null) => {
     if (!id) return null;
@@ -105,6 +108,13 @@ const MobileAdminCalendar = () => {
   const dayDeadlines = deadlines.filter((item) => isSameDay(parseISO(item.end_date), selectedDate));
   const daySubscriptions = subscriptions.filter((item) => isSameDay(parseISO(item.end_date), selectedDate));
   const total = dayAppointments.length + daySessions.length + dayDeadlines.length + daySubscriptions.length;
+  const visibleTotal = agendaFilter === "all"
+    ? total
+    : agendaFilter === "appointments"
+      ? dayAppointments.length
+      : agendaFilter === "courses"
+        ? daySessions.length
+        : dayDeadlines.length + daySubscriptions.length;
 
   const openCreate = () => {
     setForm({ title: "", start: "09:00", end: "10:00", clientId: "", coachId: profile?.user_id || coaches[0]?.user_id || "", location: "" });
@@ -155,7 +165,10 @@ const MobileAdminCalendar = () => {
       <div className="grid grid-cols-7 gap-1">
         {weekDays.map((day) => {
           const active = isSameDay(day, selectedDate);
-          const count = appointments.filter((item) => isSameDay(parseISO(item.start_time), day)).length + sessions.filter((item) => isSameDay(parseISO(item.start_time), day)).length;
+          const count = appointments.filter((item) => isSameDay(parseISO(item.start_time), day)).length
+            + sessions.filter((item) => isSameDay(parseISO(item.start_time), day)).length
+            + deadlines.filter((item) => isSameDay(parseISO(item.end_date), day)).length
+            + subscriptions.filter((item) => isSameDay(parseISO(item.end_date), day)).length;
           return (
             <button
               type="button"
@@ -181,22 +194,40 @@ const MobileAdminCalendar = () => {
         </Button>
       </div>
 
+      <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filtri agenda">
+        {[
+          { value: "all", label: "Tutti" },
+          { value: "appointments", label: "Appuntamenti" },
+          { value: "courses", label: "Corsi" },
+          { value: "deadlines", label: "Scadenze" },
+        ].map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            onClick={() => setAgendaFilter(filter.value as typeof agendaFilter)}
+            className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition ${agendaFilter === filter.value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="grid min-h-44 place-items-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
-      ) : total === 0 ? (
+      ) : visibleTotal === 0 ? (
         <Card className="rounded-3xl border-dashed"><CardContent className="py-12 text-center"><CalendarDays className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" /><p className="font-medium">Giornata libera</p><p className="mt-1 text-sm text-muted-foreground">Tocca + per aggiungere un appuntamento.</p></CardContent></Card>
       ) : (
-        <div className="space-y-3">
-          {dayAppointments.map((item) => (
+        <div className="relative space-y-3 pl-3 before:absolute before:bottom-4 before:left-0 before:top-4 before:w-px before:bg-border">
+          {(agendaFilter === "all" || agendaFilter === "appointments") && dayAppointments.map((item) => (
             <Card key={item.id} className="overflow-hidden rounded-2xl"><CardContent className="flex gap-3 p-0"><div className="w-1.5 shrink-0" style={{ backgroundColor: item.color || "#F59E0B" }} /><div className="min-w-0 flex-1 py-4 pr-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-semibold">{item.title}</p>{clientName(item.client_id) && <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground"><User className="h-3.5 w-3.5" />{clientName(item.client_id)}</p>}</div><span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold">{format(parseISO(item.start_time), "HH:mm")}</span></div>{item.location && <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5" />{item.location}</p>}</div></CardContent></Card>
           ))}
-          {daySessions.map((item) => (
+          {(agendaFilter === "all" || agendaFilter === "courses") && daySessions.map((item) => (
             <Card key={item.id} className="rounded-2xl border-emerald-500/30 bg-emerald-500/5"><CardContent className="flex items-center gap-3 p-4"><Clock className="h-5 w-5 text-emerald-500" /><div className="min-w-0 flex-1"><p className="truncate font-semibold">{item.course?.name || "Sessione corso"}</p><p className="text-xs text-muted-foreground">{format(parseISO(item.start_time), "HH:mm")}–{format(parseISO(item.end_time), "HH:mm")}</p></div></CardContent></Card>
           ))}
-          {dayDeadlines.map((item) => (
+          {(agendaFilter === "all" || agendaFilter === "deadlines") && dayDeadlines.map((item) => (
             <Card key={item.id} className="rounded-2xl border-destructive/30 bg-destructive/5"><CardContent className="flex items-center gap-3 p-4"><Dumbbell className="h-5 w-5 text-destructive" /><div><p className="font-semibold">Scheda in scadenza</p><p className="text-xs text-muted-foreground">{clientName(item.client_id) || item.name}</p></div></CardContent></Card>
           ))}
-          {daySubscriptions.map((item) => (
+          {(agendaFilter === "all" || agendaFilter === "deadlines") && daySubscriptions.map((item) => (
             <Card key={item.id} className="rounded-2xl border-orange-500/30 bg-orange-500/5"><CardContent className="flex items-center gap-3 p-4"><CreditCard className="h-5 w-5 text-orange-500" /><div><p className="font-semibold">Abbonamento in scadenza</p><p className="text-xs text-muted-foreground">{clientName(item.user_id) || item.membership_plans?.name || "Cliente"}</p></div></CardContent></Card>
           ))}
         </div>

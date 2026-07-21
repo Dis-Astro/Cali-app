@@ -58,6 +58,7 @@ jobs:
           rm -rf ios
           npx cap add ios
           npx cap sync ios
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string La voce del coach può essere registrata per personalizzare i segnali del timer." ios/App/App/Info.plist
           npx --yes @capacitor/assets@3 generate --ios \
             --iconBackgroundColor '#100017' \
             --iconBackgroundColorDark '#100017' \
