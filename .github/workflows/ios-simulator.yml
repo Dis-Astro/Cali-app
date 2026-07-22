@@ -116,8 +116,22 @@ jobs:
           PY
           xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
           xcrun simctl launch "$DEVICE_UDID" it.superpowergym.app
-          sleep 8
-          xcrun simctl io "$DEVICE_UDID" screenshot build/simulator-screenshot.png
+          sleep 5
+          xcrun simctl launch --terminate-running-process "$DEVICE_UDID" it.superpowergym.app
+          sleep 15
+
+          for attempt in 1 2 3; do
+            xcrun simctl io "$DEVICE_UDID" screenshot build/simulator-screenshot.png
+            SCREENSHOT_BYTES=$(stat -f%z build/simulator-screenshot.png)
+            if [ "$SCREENSHOT_BYTES" -gt 150000 ]; then
+              break
+            fi
+            echo "Screenshot non ancora pronto (tentativo $attempt, $SCREENSHOT_BYTES byte)."
+            xcrun simctl launch --terminate-running-process "$DEVICE_UDID" it.superpowergym.app
+            sleep 10
+          done
+
+          test "$(stat -f%z build/simulator-screenshot.png)" -gt 150000
 
       - name: Package simulator application
         shell: bash
