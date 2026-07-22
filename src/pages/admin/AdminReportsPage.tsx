@@ -118,6 +118,7 @@ async function fetchAllFeedbackCompletions() {
     const { data, error } = await withReadRetry(() => supabase
       .from("workout_completions")
       .select("id, client_id, workout_plan_exercise_id, completed_at, client_notes, difficulty_rating, set_number")
+      .or("client_notes.not.is.null,difficulty_rating.gt.0")
       .order("completed_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1));
 
