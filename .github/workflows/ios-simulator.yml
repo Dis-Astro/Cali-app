@@ -104,7 +104,16 @@ jobs:
           APP_PATH="build/DerivedData/Build/Products/Debug-iphonesimulator/App.app"
           DEVICE_UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for runtime in d.values() for x in runtime if x['name'].startswith('iPhone')))" )
           xcrun simctl boot "$DEVICE_UDID" || true
-          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          python3 - "$DEVICE_UDID" <<'PY'
+          import subprocess
+          import sys
+
+          subprocess.run(
+              ["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"],
+              check=True,
+              timeout=180,
+          )
+          PY
           xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
           xcrun simctl launch "$DEVICE_UDID" it.superpowergym.app
           sleep 8
