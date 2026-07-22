@@ -126,11 +126,13 @@ async function captureCoachingFlow() {
       const timerLauncher = page.getByTestId('workout-timer-launcher').first();
       if (await timerLauncher.count()) {
         await timerLauncher.click();
-        await page.waitForTimeout(350);
-        await saveCurrentViewport('41-coaching-timer-configurazione', 'Timer libero aperto dall’esercizio');
-
         const openTimerButton = page.getByRole('button', { name: 'Apri timer', exact: true });
         if (await openTimerButton.count()) {
+          await openTimerButton.waitFor({ state: 'visible', timeout: 5000 });
+          await openTimerButton.scrollIntoViewIfNeeded();
+          await page.waitForTimeout(700);
+          await saveCurrentViewport('41-coaching-timer-configurazione', 'Timer libero aperto dall’esercizio');
+
           await openTimerButton.click();
           await page.waitForTimeout(350);
 
