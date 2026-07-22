@@ -88,6 +88,24 @@ interface WeekFeedback {
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK_SIZE = 150;
+const READ_RETRY_DELAYS_MS = [350, 900];
+
+async function withReadRetry<T>(operation: () => PromiseLike<T>): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= READ_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const delay = READ_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) break;
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
 
 const hasFeedback = (completion: { client_notes: string | null; difficulty_rating: number | null }) =>
   Boolean(completion.client_notes?.trim()) || (completion.difficulty_rating || 0) > 0;
@@ -97,11 +115,11 @@ async function fetchAllFeedbackCompletions() {
   let from = 0;
 
   while (true) {
-    const { data, error } = await supabase
+    const { data, error } = await withReadRetry(() => supabase
       .from("workout_completions")
       .select("id, client_id, workout_plan_exercise_id, completed_at, client_notes, difficulty_rating, set_number")
       .order("completed_at", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
+      .range(from, from + PAGE_SIZE - 1));
 
     if (error) throw error;
     const batch = data || [];
@@ -119,9 +137,9 @@ async function fetchInChunks(table: "workout_plan_exercises" | "workout_plans" |
 
   for (let i = 0; i < uniqueIds.length; i += IN_CHUNK_SIZE) {
     const chunk = uniqueIds.slice(i, i + IN_CHUNK_SIZE);
-    const { data, error } = await (supabase.from(table) as any)
+    const { data, error } = await withReadRetry(() => (supabase.from(table) as any)
       .select(select)
-      .in(column, chunk);
+      .in(column, chunk));
 
     if (error) throw error;
     rows.push(...(data || []));
@@ -223,8 +241,9 @@ const AdminReportsPage = () => {
       console.error("Errore caricamento feedback clienti", error);
       toast({ title: "Errore", description: "Impossibile caricare i feedback clienti", variant: "destructive" });
       setClients([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fetchClientPlans = async (clientId: string) => {
