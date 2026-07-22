@@ -122,6 +122,37 @@ async function captureCoachingFlow() {
       await firstExercise.click();
       await page.waitForTimeout(500);
       await saveCurrentViewport('39-coaching-esercizio-aperto', 'Primo esercizio aperto con testo completo');
+
+      const timerLauncher = page.getByTestId('workout-timer-launcher').first();
+      if (await timerLauncher.count()) {
+        await timerLauncher.click();
+        await page.waitForTimeout(350);
+        await saveCurrentViewport('41-coaching-timer-configurazione', 'Timer libero aperto dall’esercizio');
+
+        const openTimerButton = page.getByRole('button', { name: 'Apri timer', exact: true });
+        if (await openTimerButton.count()) {
+          await openTimerButton.click();
+          await page.waitForTimeout(350);
+
+          const timerScreen = page.getByTestId('workout-timer-screen');
+          if (!await timerScreen.count()) throw new Error('La schermata Timer non si è aperta.');
+          await saveCurrentViewport('42-coaching-timer-fullscreen', 'Timer fullscreen con testo esercizio visibile');
+
+          const startTimer = page.getByTestId('timer-start');
+          if (!await startTimer.count()) throw new Error('Il pulsante di avvio Timer non è disponibile.');
+          await startTimer.click();
+          await page.waitForTimeout(500);
+
+          const preparationValue = (await page.getByTestId('timer-display').textContent())?.trim();
+          if (preparationValue !== '10' && preparationValue !== '9') {
+            throw new Error(`Countdown di preparazione inatteso: ${preparationValue || 'vuoto'}`);
+          }
+          await saveCurrentViewport('43-coaching-timer-preparazione', 'Countdown iniziale di 10 secondi');
+
+          const closeTimer = page.getByRole('button', { name: 'Chiudi timer', exact: true });
+          if (await closeTimer.count()) await closeTimer.click();
+        }
+      }
     }
   }
 

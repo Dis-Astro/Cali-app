@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,41 +7,42 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
-import Index from "./pages/Index";
-import Contatti from "./pages/Contatti";
-import Login from "./pages/Login";
-import NotFound from "./pages/NotFound";
-import Dashboard from "./pages/Dashboard";
+const Index = lazy(() => import("./pages/Index"));
+const Contatti = lazy(() => import("./pages/Contatti"));
+const Login = lazy(() => import("./pages/Login"));
+const SetPassword = lazy(() => import("./pages/SetPassword"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import UserManagement from "./pages/admin/UserManagement";
-import NewUserManagementPage from "./pages/admin/NewUserManagementPage";
-import ClientDetailPage from "./pages/admin/ClientDetailPage";
-import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
-import CalendarManagement from "./pages/admin/CalendarManagement";
-import WorkoutPlanEditor from "./pages/admin/WorkoutPlanEditor";
-import GymHoursManagement from "./pages/admin/GymHoursManagement";
-import CourseManagement from "./pages/admin/CourseManagement";
-import MembershipPlanManagement from "./pages/admin/MembershipPlanManagement";
-import AdminReportsPage from "./pages/admin/AdminReportsPage";
-import StructurePerformancePage from "./pages/admin/StructurePerformancePage";
-import ExpensesManagement from "./pages/admin/ExpensesManagement";
-import TimerAudioManagement from "./pages/shared/TimerAudioManagement";
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const UserManagement = lazy(() => import("./pages/admin/UserManagement"));
+const NewUserManagementPage = lazy(() => import("./pages/admin/NewUserManagementPage"));
+const ClientDetailPage = lazy(() => import("./pages/admin/ClientDetailPage"));
+const SubscriptionManagement = lazy(() => import("./pages/admin/SubscriptionManagement"));
+const CalendarManagement = lazy(() => import("./pages/admin/CalendarManagement"));
+const WorkoutPlanEditor = lazy(() => import("./pages/admin/WorkoutPlanEditor"));
+const GymHoursManagement = lazy(() => import("./pages/admin/GymHoursManagement"));
+const CourseManagement = lazy(() => import("./pages/admin/CourseManagement"));
+const MembershipPlanManagement = lazy(() => import("./pages/admin/MembershipPlanManagement"));
+const AdminReportsPage = lazy(() => import("./pages/admin/AdminReportsPage"));
+const StructurePerformancePage = lazy(() => import("./pages/admin/StructurePerformancePage"));
+const ExpensesManagement = lazy(() => import("./pages/admin/ExpensesManagement"));
+const TimerAudioManagement = lazy(() => import("./pages/shared/TimerAudioManagement"));
 
-import CoachDashboard from "./pages/coach/CoachDashboard";
-import CoachClientsPage from "./pages/coach/CoachClientsPage";
-import CoachWorkoutsPage from "./pages/coach/CoachWorkoutsPage";
-import CoachCalendarPage from "./pages/coach/CoachCalendarPage";
-import CoachReportsPage from "./pages/coach/CoachReportsPage";
+const CoachDashboard = lazy(() => import("./pages/coach/CoachDashboard"));
+const CoachClientsPage = lazy(() => import("./pages/coach/CoachClientsPage"));
+const CoachWorkoutsPage = lazy(() => import("./pages/coach/CoachWorkoutsPage"));
+const CoachCalendarPage = lazy(() => import("./pages/coach/CoachCalendarPage"));
+const CoachReportsPage = lazy(() => import("./pages/coach/CoachReportsPage"));
 
-import PalestraDashboard from "./pages/cliente/PalestraDashboard";
-import MobileCoachingHome from "./pages/cliente/MobileCoachingHome";
-import WorkoutPlanPage from "./pages/cliente/WorkoutPlanPage";
-import WorkoutArchivePage from "./pages/cliente/WorkoutArchivePage";
-import ProgressPage from "./pages/cliente/ProgressPage";
-import AppointmentsPage from "./pages/cliente/AppointmentsPage";
-import DocumentsPage from "./pages/cliente/DocumentsPage";
-import ReportProblemPage from "./pages/cliente/ReportProblemPage";
+const PalestraDashboard = lazy(() => import("./pages/cliente/PalestraDashboard"));
+const MobileCoachingHome = lazy(() => import("./pages/cliente/MobileCoachingHome"));
+const WorkoutPlanPage = lazy(() => import("./pages/cliente/WorkoutPlanPage"));
+const WorkoutArchivePage = lazy(() => import("./pages/cliente/WorkoutArchivePage"));
+const ProgressPage = lazy(() => import("./pages/cliente/ProgressPage"));
+const AppointmentsPage = lazy(() => import("./pages/cliente/AppointmentsPage"));
+const DocumentsPage = lazy(() => import("./pages/cliente/DocumentsPage"));
+const ReportProblemPage = lazy(() => import("./pages/cliente/ReportProblemPage"));
 
 const queryClient = new QueryClient();
 
@@ -51,10 +53,12 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
+          <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">Caricamento…</div>}>
+            <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/contatti" element={<Contatti />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/set-password" element={<SetPassword />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 
             <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
@@ -95,7 +99,8 @@ const App = () => (
             <Route path="/coaching/*" element={<ProtectedRoute allowedRoles={["cliente_coaching"]}><MobileCoachingHome /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

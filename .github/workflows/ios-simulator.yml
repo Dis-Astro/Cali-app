@@ -32,6 +32,10 @@ jobs:
     name: Build and launch on iPhone Simulator
     runs-on: macos-15
     timeout-minutes: 35
+    env:
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.STAGING_SUPABASE_PROJECT_ID }}
+      VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STAGING_SUPABASE_PUBLISHABLE_KEY }}
 
     steps:
       - name: Checkout repository

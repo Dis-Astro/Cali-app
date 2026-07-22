@@ -30,6 +30,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.STAGING_SUPABASE_PROJECT_ID }}
+      VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STAGING_SUPABASE_PUBLISHABLE_KEY }}
       E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
       E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
       E2E_EXPECTED_ROLE: cliente_coaching
@@ -94,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.STAGING_SUPABASE_PROJECT_ID }}
+      VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STAGING_SUPABASE_PUBLISHABLE_KEY }}
       E2E_EMAIL: ${{ secrets.ADMINPSW }}
       E2E_PASSWORD: ${{ secrets.ADMINPASS }}
       E2E_EXPECTED_ROLE: admin

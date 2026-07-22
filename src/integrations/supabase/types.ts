@@ -1030,6 +1030,7 @@ export type Database = {
         | "cliente_palestra"
         | "cliente_coaching"
         | "cliente_corso"
+        | "segretaria"
       workout_plan_status: "attiva" | "in_pausa" | "conclusa"
     }
     CompositeTypes: {
@@ -1168,6 +1169,7 @@ export const Constants = {
         "cliente_palestra",
         "cliente_coaching",
         "cliente_corso",
+        "segretaria",
       ],
       workout_plan_status: ["attiva", "in_pausa", "conclusa"],
     },
