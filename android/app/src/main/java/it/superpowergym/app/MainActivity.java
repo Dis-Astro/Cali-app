@@ -1,4 +1,4 @@
-package com.tuo.calistenics;
+package it.superpowergym.app;
 
 import com.getcapacitor.BridgeActivity;
 
