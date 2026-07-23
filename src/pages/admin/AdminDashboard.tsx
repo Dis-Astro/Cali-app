@@ -76,13 +76,59 @@ const AdminDashboard = () => {
 
   return (
     <AdminLayout title="PANNELLO ADMIN" icon={<BarChart3 className="w-6 h-6" />}>
-      <div className="mb-8">
-        <h2 className="text-2xl font-display tracking-wider mb-2">Benvenuto, {profile?.first_name}!</h2>
-        <p className="text-muted-foreground">Ecco una panoramica della tua palestra.</p>
+      <div className="mb-5 md:mb-8">
+        <h2 className="mb-1 font-display text-2xl tracking-wider">Ciao, {profile?.first_name}!</h2>
+        <p className="text-sm text-muted-foreground md:text-base">Le priorità e le attività della palestra.</p>
+      </div>
+
+      <div className="mb-6 space-y-4 md:hidden">
+        <button type="button" onClick={() => navigate("/admin/calendario")} className="w-full rounded-3xl border border-emerald-500/30 bg-emerald-500/5 p-5 text-left">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-500">Oggi</p>
+              <p className="mt-1 font-display text-4xl">{stats.todayAppointments}</p>
+              <p className="text-sm text-muted-foreground">appuntamenti in agenda</p>
+            </div>
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15"><Calendar className="h-7 w-7 text-emerald-500" /></div>
+          </div>
+        </button>
+
+        <Card className="rounded-3xl border-border">
+          <CardHeader className="pb-2"><CardTitle className="font-display text-2xl tracking-wider">DA GESTIRE</CardTitle></CardHeader>
+          <CardContent className="space-y-1">
+            {[
+              { label: "Abbonamenti scaduti", value: stats.expiredSubscriptions, color: "text-destructive", href: "/admin/abbonamenti?filter=scaduti" },
+              { label: "Rinnovi entro 7 giorni", value: stats.expiringSubscriptions, color: "text-yellow-500", href: "/admin/abbonamenti?filter=in_scadenza" },
+              { label: "Schede in scadenza", value: stats.expiringPlans, color: "text-orange-500", href: "/admin/utenti?filter=schede_scadenza" },
+            ].map((item) => (
+              <button key={item.label} type="button" onClick={() => navigate(item.href)} className="flex min-h-12 w-full items-center justify-between rounded-xl px-2 text-left active:bg-muted">
+                <span className="text-sm">{item.label}</span>
+                <span className={`font-display text-2xl ${item.color}`}>{item.value}</span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+
+        <div>
+          <h3 className="mb-3 font-display text-xl tracking-wider">AZIONI RAPIDE</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { icon: UserPlus, label: "Nuovo cliente", href: "/admin/utenti/nuovo" },
+              { icon: Calendar, label: "Appuntamento", href: "/admin/calendario" },
+              { icon: CreditCard, label: "Pagamento", href: "/admin/abbonamenti" },
+              { icon: Dumbbell, label: "Crea scheda", href: "/admin/utenti" },
+            ].map((item) => (
+              <Link key={item.label} to={item.href} className="flex min-h-24 flex-col justify-between rounded-2xl border border-border bg-card p-4 active:bg-muted">
+                <item.icon className="h-6 w-6 text-primary" />
+                <span className="text-sm font-semibold">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid - CLICKABLE */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="mb-8 hidden grid-cols-1 gap-4 md:grid md:grid-cols-2 lg:grid-cols-3">
         {statCards.map((stat) => (
           <Card key={stat.label} className="bg-card border-border cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all" onClick={stat.onClick}>
             <CardContent className="p-6">
@@ -99,7 +145,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="hidden grid-cols-1 gap-6 md:grid lg:grid-cols-2">
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="font-display tracking-wider">Azioni Rapide</CardTitle>

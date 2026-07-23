@@ -8,6 +8,7 @@ import {
   Layers3,
   LogOut,
   MessageSquare,
+  Mic,
   MoreHorizontal,
   Receipt,
   TrendingUp,
@@ -36,6 +37,7 @@ const moreItems = [
   { label: "Orari palestra", href: "/admin/orari", icon: Clock },
   { label: "Piani", href: "/admin/piani", icon: Layers3 },
   { label: "Feedback", href: "/admin/segnalazioni", icon: MessageSquare },
+  { label: "Audio Timer", href: "/admin/audio-timer", icon: Mic },
   { label: "Spese", href: "/admin/spese", icon: Receipt },
   { label: "Andamento", href: "/admin/andamento-struttura", icon: TrendingUp },
 ];

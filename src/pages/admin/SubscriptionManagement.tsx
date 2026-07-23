@@ -735,7 +735,46 @@ const SubscriptionManagement = () => {
               ) : filteredSubscriptions.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground"><CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>Nessun abbonamento trovato</p></div>
               ) : (
-                <div className="w-full overflow-x-auto">
+                <>
+                <div className="space-y-3 md:hidden">
+                  {filteredSubscriptions.map((sub) => {
+                    const expStatus = getExpirationStatus(sub.end_date);
+                    const roleLabel = sub.profiles?.role === "cliente_coaching" ? "Coaching" : sub.profiles?.role === "cliente_corso" ? "Corso" : "Palestra";
+                    const roleVariant: "default" | "secondary" | "outline" = sub.profiles?.role === "cliente_coaching" ? "default" : sub.profiles?.role === "cliente_corso" ? "secondary" : "outline";
+                    return (
+                      <article key={sub.id} className="rounded-2xl border border-border bg-card p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="break-words text-base font-semibold">{sub.profiles?.first_name} {sub.profiles?.last_name}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{sub.membership_plans?.name}</p>
+                          </div>
+                          <Badge variant={expStatus.variant} className="shrink-0 gap-1"><expStatus.icon className="h-3 w-3" />{expStatus.label}</Badge>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <Badge variant={roleVariant}>{roleLabel}</Badge>
+                          <span className="text-muted-foreground">Scade il <strong className="text-foreground">{format(new Date(sub.end_date), "dd MMM yyyy", { locale: it })}</strong></span>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-3">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="gap-1.5"
+                            onClick={() => {
+                              setNewPayment({ ...newPayment, subscription_id: sub.id, amount: sub.membership_plans?.price?.toString() || "" });
+                              setIsPaymentDialogOpen(true);
+                            }}
+                          >
+                            <Euro className="h-4 w-4" />Pagamento
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => handleRenewSubscription(sub)} disabled={renewingId === sub.id}>
+                            {renewingId === sub.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Rinnova
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="hidden w-full overflow-x-auto md:block">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -747,11 +786,11 @@ const SubscriptionManagement = () => {
                       {filteredSubscriptions.map((sub) => {
                         const expStatus = getExpirationStatus(sub.end_date);
                         const roleLabel = sub.profiles?.role === 'cliente_coaching' ? 'Coaching' : sub.profiles?.role === 'cliente_corso' ? 'Corso' : 'Palestra';
-                        const roleVariant = sub.profiles?.role === 'cliente_coaching' ? 'default' : sub.profiles?.role === 'cliente_corso' ? 'secondary' : 'outline';
+                        const roleVariant: "default" | "secondary" | "outline" = sub.profiles?.role === 'cliente_coaching' ? 'default' : sub.profiles?.role === 'cliente_corso' ? 'secondary' : 'outline';
                         return (
                           <TableRow key={sub.id}>
                             <TableCell className="font-medium">{sub.profiles?.first_name} {sub.profiles?.last_name}</TableCell>
-                            <TableCell><Badge variant={roleVariant as any}>{roleLabel}</Badge></TableCell>
+                            <TableCell><Badge variant={roleVariant}>{roleLabel}</Badge></TableCell>
                             <TableCell>{sub.membership_plans?.name}</TableCell>
                             <TableCell>{format(new Date(sub.start_date), "dd MMM yyyy", { locale: it })}</TableCell>
                             <TableCell>{format(new Date(sub.end_date), "dd MMM yyyy", { locale: it })}</TableCell>
@@ -778,6 +817,7 @@ const SubscriptionManagement = () => {
                     </TableBody>
                   </Table>
                 </div>
+                </>
               )}
             </CardContent>
           </Card>

@@ -782,6 +782,45 @@ export type Database = {
           },
         ]
       }
+      timer_audio_cues: {
+        Row: {
+          created_at: string
+          created_by: string
+          duration_seconds: number | null
+          event_type: string
+          id: string
+          is_active: boolean
+          mime_type: string
+          storage_path: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          duration_seconds?: number | null
+          event_type: string
+          id?: string
+          is_active?: boolean
+          mime_type: string
+          storage_path: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          duration_seconds?: number | null
+          event_type?: string
+          id?: string
+          is_active?: boolean
+          mime_type?: string
+          storage_path?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       workout_completions: {
         Row: {
           actual_reps: string | null
@@ -991,6 +1030,7 @@ export type Database = {
         | "cliente_palestra"
         | "cliente_coaching"
         | "cliente_corso"
+        | "segretaria"
       workout_plan_status: "attiva" | "in_pausa" | "conclusa"
     }
     CompositeTypes: {
@@ -1129,6 +1169,7 @@ export const Constants = {
         "cliente_palestra",
         "cliente_coaching",
         "cliente_corso",
+        "segretaria",
       ],
       workout_plan_status: ["attiva", "in_pausa", "conclusa"],
     },
