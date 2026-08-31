@@ -3,13 +3,20 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Loader2, MessageSquare, Play, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import {
   getOfflineCache,
   getPendingWorkoutCompletions,
   queueWorkoutCompletion,
   setOfflineCache,
 } from "@/lib/offlineSync";
+import {
+  calculateCurrentWeek,
+  calculateTotalWeeks,
+  downloadWorkoutPlanForOffline,
+  workoutDayCacheKey,
+  type OfflineWorkoutDaySnapshot as CachedDay,
+  type OfflineWorkoutExercise as Exercise,
+} from "@/lib/offlineWorkout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,32 +24,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Textarea } from "@/components/ui/textarea";
 import LightningRating from "./LightningRating";
 import WorkoutTimerLauncher from "@/features/workout-timer/WorkoutTimerLauncher";
-
-type Plan = { id: string; name: string; start_date: string; end_date: string };
-type Video = { id: string; title: string; video_url: string };
-type CoachNote = { id: string; note: string | null; rating: number | null; workout_plan_exercise_id: string };
-type Week = { id?: string; week_number: number; client_notes: string; difficulty_rating: number; saved: boolean; pending?: boolean };
-type Exercise = {
-  id: string;
-  notes: string | null;
-  rest_seconds: number | null;
-  order_index: number;
-  exercise_name: string | null;
-  video: Video | null;
-  coachTestNote?: CoachNote;
-  weekCompletions: Week[];
-};
-type CachedDay = { plan: Plan; exercises: Exercise[]; currentWeek: number; totalWeeks: number };
-
-const calculateTotalWeeks = (startDate: string, endDate: string) =>
-  Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 604800000));
-
-const calculateCurrentWeek = (startDate: string, endDate: string) => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const reference = new Date() > end ? end : new Date();
-  return Math.max(1, Math.floor((reference.getTime() - start.getTime()) / 604800000) + 1);
-};
+import ExerciseVideoRecorder from "./ExerciseVideoRecorder";
 
 const OfflineWorkoutDayDetail = () => {
   const { dayId } = useParams<{ dayId: string }>();
@@ -52,7 +34,7 @@ const OfflineWorkoutDayDetail = () => {
   const dayNumber = Number.parseInt(dayId || "1", 10);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [plan, setPlan] = useState<CachedDay["plan"] | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [totalWeeks, setTotalWeeks] = useState(1);
@@ -60,7 +42,7 @@ const OfflineWorkoutDayDetail = () => {
   const [loadedFromCache, setLoadedFromCache] = useState(false);
 
   const cacheKey = useMemo(
-    () => `workout-day:${profile?.user_id || "anon"}:${requestedPlanId || "active"}:${dayNumber}`,
+    () => workoutDayCacheKey(profile?.user_id || "anon", dayNumber, requestedPlanId),
     [profile?.user_id, requestedPlanId, dayNumber],
   );
 
@@ -95,9 +77,11 @@ const OfflineWorkoutDayDetail = () => {
   };
 
   const applySnapshot = async (snapshot: CachedDay, fromCache: boolean) => {
+    const weeks = calculateTotalWeeks(snapshot.plan.start_date, snapshot.plan.end_date);
+    const current = Math.min(calculateCurrentWeek(snapshot.plan.start_date, snapshot.plan.end_date), weeks);
     setPlan(snapshot.plan);
-    setCurrentWeek(snapshot.currentWeek);
-    setTotalWeeks(snapshot.totalWeeks);
+    setCurrentWeek(current);
+    setTotalWeeks(weeks);
     setExercises(await mergePending(snapshot.exercises));
     setLoadedFromCache(fromCache);
   };
@@ -116,98 +100,11 @@ const OfflineWorkoutDayDetail = () => {
 
     try {
       const userId = profile!.user_id;
-      const today = new Date().toISOString().split("T")[0];
-      let selectedPlan: Plan | null = null;
-
-      if (requestedPlanId) {
-        const { data, error } = await supabase
-          .from("workout_plans")
-          .select("id, name, start_date, end_date")
-          .eq("client_id", userId)
-          .eq("id", requestedPlanId)
-          .is("deleted_at" as any, null)
-          .maybeSingle();
-        if (error) throw error;
-        selectedPlan = data as Plan | null;
-      } else {
-        const { data, error } = await supabase
-          .from("workout_plans")
-          .select("id, name, start_date, end_date")
-          .eq("client_id", userId)
-          .is("deleted_at" as any, null)
-          .lte("start_date", today)
-          .gte("end_date", today)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (error) throw error;
-        selectedPlan = (data?.[0] || null) as Plan | null;
-
-        if (!selectedPlan) {
-          const { data: recent, error: recentError } = await supabase
-            .from("workout_plans")
-            .select("id, name, start_date, end_date")
-            .eq("client_id", userId)
-            .is("deleted_at" as any, null)
-            .order("end_date", { ascending: false })
-            .limit(1);
-          if (recentError) throw recentError;
-          selectedPlan = (recent?.[0] || null) as Plan | null;
-        }
-      }
-
-      if (!selectedPlan) throw new Error("Nessuna scheda disponibile");
-
-      const weeks = calculateTotalWeeks(selectedPlan.start_date, selectedPlan.end_date);
-      const current = Math.min(calculateCurrentWeek(selectedPlan.start_date, selectedPlan.end_date), weeks);
-      const { data: planExercises, error: exerciseError } = await supabase
-        .from("workout_plan_exercises")
-        .select("id, notes, rest_seconds, order_index, exercise_name, video:exercise_videos(id, title, video_url)")
-        .eq("workout_plan_id", selectedPlan.id)
-        .eq("day_of_week", dayNumber)
-        .order("order_index");
-      if (exerciseError) throw exerciseError;
-
-      const exerciseIds = (planExercises || []).map((exercise) => exercise.id);
-      const [completionResult, coachResult] = exerciseIds.length
-        ? await Promise.all([
-            supabase.from("workout_completions").select("*").eq("client_id", userId).in("workout_plan_exercise_id", exerciseIds),
-            supabase.from("coach_test_notes").select("*").in("workout_plan_exercise_id", exerciseIds),
-          ])
-        : [{ data: [], error: null }, { data: [], error: null }];
-
-      if (completionResult.error) throw completionResult.error;
-      if (coachResult.error) throw coachResult.error;
-
-      const completions = completionResult.data || [];
-      const coachNotes = (coachResult.data || []) as CoachNote[];
-      const normalized: Exercise[] = (planExercises || []).map((exercise) => {
-        const weeksList: Week[] = [];
-        for (let weekNumber = 1; weekNumber <= weeks; weekNumber += 1) {
-          const existing = completions.find(
-            (completion) =>
-              completion.workout_plan_exercise_id === exercise.id &&
-              completion.set_number === weekNumber,
-          );
-          weeksList.push({
-            id: existing?.id,
-            week_number: weekNumber,
-            client_notes: existing?.client_notes || "",
-            difficulty_rating: existing?.difficulty_rating || 0,
-            saved: Boolean(existing),
-          });
-        }
-        return {
-          ...exercise,
-          exercise_name: exercise.exercise_name || "Esercizio",
-          video: exercise.video as unknown as Video | null,
-          coachTestNote: coachNotes.find((note) => note.workout_plan_exercise_id === exercise.id),
-          weekCompletions: weeksList,
-        };
-      });
-
-      const snapshot: CachedDay = { plan: selectedPlan, exercises: normalized, currentWeek: current, totalWeeks: weeks };
-      await setOfflineCache(cacheKey, snapshot);
-      await applySnapshot(snapshot, false);
+      const downloaded = await downloadWorkoutPlanForOffline(userId, requestedPlanId);
+      if (!downloaded) throw new Error("Nessuna scheda disponibile");
+      const fresh = await getOfflineCache<CachedDay>(cacheKey);
+      if (!fresh) throw new Error("Impossibile salvare la scheda sul dispositivo");
+      await applySnapshot(fresh.value, false);
     } catch (error) {
       if (!cached) toast.error(error instanceof Error ? error.message : "Impossibile caricare la scheda");
     } finally {
@@ -216,16 +113,20 @@ const OfflineWorkoutDayDetail = () => {
   };
 
   const updateWeek = (exerciseId: string, weekNumber: number, field: "client_notes" | "difficulty_rating", value: string | number) => {
-    setExercises((previous) => previous.map((exercise) =>
-      exercise.id !== exerciseId
-        ? exercise
-        : {
-            ...exercise,
-            weekCompletions: exercise.weekCompletions.map((week) =>
-              week.week_number === weekNumber ? { ...week, [field]: value, saved: false, pending: false } : week,
-            ),
-          },
-    ));
+    setExercises((previous) => {
+      const next = previous.map((exercise) =>
+        exercise.id !== exerciseId
+          ? exercise
+          : {
+              ...exercise,
+              weekCompletions: exercise.weekCompletions.map((week) =>
+                week.week_number === weekNumber ? { ...week, [field]: value, saved: false, pending: false } : week,
+              ),
+            },
+      );
+      if (plan) void setOfflineCache(cacheKey, { plan, exercises: next, currentWeek, totalWeeks });
+      return next;
+    });
   };
 
   const saveWeek = async (exerciseId: string, weekNumber: number) => {
@@ -337,7 +238,8 @@ const OfflineWorkoutDayDetail = () => {
                     )}
                   </CardContent>
                 </CollapsibleContent>
-                <div className="flex justify-end border-t border-border/60 bg-card/80 px-3 py-2">
+                <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 bg-card/80 px-3 py-2">
+                  <ExerciseVideoRecorder exerciseName={exercise.exercise_name} />
                   <WorkoutTimerLauncher exerciseName={exercise.exercise_name} exerciseNotes={exercise.notes} />
                 </div>
               </Card>

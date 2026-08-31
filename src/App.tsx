@@ -3,8 +3,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const Index = lazy(() => import("./pages/Index"));
@@ -46,6 +47,13 @@ const ReportProblemPage = lazy(() => import("./pages/cliente/ReportProblemPage")
 
 const queryClient = new QueryClient();
 
+const AppEntry = () => {
+  const { isAuthenticated, loading } = useAuth();
+  if (!Capacitor.isNativePlatform()) return <Index />;
+  if (loading) return <div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">Caricamento…</div>;
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -55,7 +63,7 @@ const App = () => (
         <BrowserRouter>
           <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">Caricamento…</div>}>
             <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<AppEntry />} />
             <Route path="/contatti" element={<Contatti />} />
             <Route path="/login" element={<Login />} />
             <Route path="/set-password" element={<SetPassword />} />

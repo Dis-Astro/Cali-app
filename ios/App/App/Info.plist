@@ -25,11 +25,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>La fotocamera consente di allegare immagini alle segnalazioni e al profilo.</string>
+	<string>La fotocamera consente di registrare i video degli esercizi e allegare immagini nell'app.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Il microfono consente al coach di registrare i segnali vocali del timer.</string>
+	<string>Il microfono consente di registrare l'audio dei video degli esercizi e i segnali vocali del timer.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Super Power Gym salva nella Galleria i video degli esercizi registrati dall'utente.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>La libreria foto consente di scegliere immagini da allegare nell'app.</string>
+	<string>La libreria Foto consente di scegliere contenuti e salvare i video degli esercizi.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

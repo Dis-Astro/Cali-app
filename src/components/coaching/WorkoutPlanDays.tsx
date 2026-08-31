@@ -4,34 +4,18 @@ import { format, isPast } from "date-fns";
 import { it } from "date-fns/locale";
 import { Calendar, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Clock, Dumbbell, Loader2, Pause } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { getOfflineCache, setOfflineCache } from "@/lib/offlineSync";
+import { getOfflineCache } from "@/lib/offlineSync";
+import {
+  downloadWorkoutPlanForOffline,
+  workoutPlanCacheKey,
+  type OfflineWorkoutDaySummary as DayExercise,
+  type OfflineWorkoutPlan as WorkoutPlan,
+  type OfflineWorkoutPlanSnapshot as CachedPlanDays,
+} from "@/lib/offlineWorkout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-
-interface WorkoutPlan {
-  id: string;
-  name: string;
-  description: string | null;
-  start_date: string;
-  end_date: string;
-  coach_notes: string | null;
-  status?: string;
-  plan_type?: string;
-}
-
-interface DayExercise {
-  day_of_week: number;
-  exercise_count: number;
-  completed_count: number;
-}
-
-interface CachedPlanDays {
-  activePlan: WorkoutPlan;
-  dayExercises: DayExercise[];
-}
 
 const WorkoutPlanDays = () => {
   const { profile } = useAuth();
@@ -52,7 +36,7 @@ const WorkoutPlanDays = () => {
     setLoading(true);
     setDetailsOpen(false);
     const userId = profile.user_id;
-    const cacheKey = `workout-plan-days:${userId}:${requestedPlanId || "active"}`;
+    const cacheKey = workoutPlanCacheKey(userId, requestedPlanId);
     const cached = await getOfflineCache<CachedPlanDays>(cacheKey);
 
     if (cached) {
@@ -67,88 +51,17 @@ const WorkoutPlanDays = () => {
     }
 
     try {
-      const today = new Date().toISOString().split("T")[0];
-      let plans: WorkoutPlan[] | null = null;
-
-      if (requestedPlanId) {
-        const { data, error } = await supabase
-          .from("workout_plans")
-          .select("*")
-          .eq("client_id", userId)
-          .eq("id", requestedPlanId)
-          .is("deleted_at" as any, null)
-          .limit(1);
-        if (error) throw error;
-        plans = data as WorkoutPlan[] | null;
-      } else {
-        const { data, error } = await supabase
-          .from("workout_plans")
-          .select("*")
-          .eq("client_id", userId)
-          .is("deleted_at" as any, null)
-          .lte("start_date", today)
-          .gte("end_date", today)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (error) throw error;
-        plans = data as WorkoutPlan[] | null;
-
-        if (!plans?.length) {
-          const { data: recent, error: recentError } = await supabase
-            .from("workout_plans")
-            .select("*")
-            .eq("client_id", userId)
-            .is("deleted_at" as any, null)
-            .order("end_date", { ascending: false })
-            .limit(1);
-          if (recentError) throw recentError;
-          plans = recent as WorkoutPlan[] | null;
-        }
-      }
-
-      const selectedPlan = plans?.[0] || null;
-      if (!selectedPlan) {
+      const fresh = await downloadWorkoutPlanForOffline(userId, requestedPlanId);
+      if (!fresh) {
         if (!cached) {
           setActivePlan(null);
           setDayExercises([]);
         }
         return;
       }
-
-      const { data: exercises, error: exerciseError } = await supabase
-        .from("workout_plan_exercises")
-        .select("id, day_of_week, order_index")
-        .eq("workout_plan_id", selectedPlan.id)
-        .order("order_index");
-      if (exerciseError) throw exerciseError;
-
-      const { data: completions, error: completionError } = exercises?.length
-        ? await supabase
-            .from("workout_completions")
-            .select("workout_plan_exercise_id")
-            .eq("client_id", userId)
-            .in("workout_plan_exercise_id", exercises.map((exercise) => exercise.id))
-        : { data: [], error: null };
-      if (completionError) throw completionError;
-
-      const completedSet = new Set((completions || []).map((completion) => completion.workout_plan_exercise_id));
-      const dayMap = new Map<number, { total: number; done: number }>();
-      (exercises || []).forEach((exercise) => {
-        const day = exercise.day_of_week ?? 1;
-        if (!dayMap.has(day)) dayMap.set(day, { total: 0, done: 0 });
-        const item = dayMap.get(day)!;
-        item.total += 1;
-        if (completedSet.has(exercise.id)) item.done += 1;
-      });
-
-      const normalized = Array.from(dayMap.entries())
-        .map(([day, values]) => ({ day_of_week: day, exercise_count: values.total, completed_count: values.done }))
-        .sort((a, b) => a.day_of_week - b.day_of_week);
-
-      setActivePlan(selectedPlan);
-      setDayExercises(normalized);
+      setActivePlan(fresh.activePlan);
+      setDayExercises(fresh.dayExercises);
       setFromCache(false);
-      await setOfflineCache(cacheKey, { activePlan: selectedPlan, dayExercises: normalized });
     } catch {
       if (!cached) {
         setActivePlan(null);

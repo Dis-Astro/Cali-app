@@ -16,7 +16,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 const Login = () => {
   const navigate = useNavigate();
-  const { signIn, user, loading: authLoading } = useAuth();
+  const { signIn, isAuthenticated, loading: authLoading } = useAuth();
   const [formData, setFormData] = useState<LoginFormData>({ email: "", password: "" });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [authError, setAuthError] = useState<string | null>(null);
@@ -24,8 +24,8 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (user && !authLoading) navigate("/dashboard", { replace: true });
-  }, [user, authLoading, navigate]);
+    if (isAuthenticated && !authLoading) navigate("/dashboard", { replace: true });
+  }, [isAuthenticated, authLoading, navigate]);
 
   if (authLoading) return null;
 
