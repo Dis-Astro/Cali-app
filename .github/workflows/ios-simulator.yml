@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feat/ios-super-power-gym
     paths:
       - "src/**"
       - "public/**"
@@ -13,6 +12,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.ts"
+      - "ios/**"
       - ".github/workflows/ios-simulator.yml"
   pull_request:
     paths:
@@ -22,6 +22,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.ts"
+      - "ios/**"
       - ".github/workflows/ios-simulator.yml"
 
 permissions:
@@ -56,18 +57,8 @@ jobs:
       - name: Build React application
         run: npm run build
 
-      - name: Generate iOS project and artwork
-        shell: bash
-        run: |
-          rm -rf ios
-          npx cap add ios
-          npx cap sync ios
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string La voce del coach può essere registrata per personalizzare i segnali del timer." ios/App/App/Info.plist
-          npx --yes @capacitor/assets@3 generate --ios \
-            --iconBackgroundColor '#100017' \
-            --iconBackgroundColorDark '#100017' \
-            --splashBackgroundColor '#100017' \
-            --splashBackgroundColorDark '#100017'
+      - name: Synchronize the iOS project
+        run: npx cap sync ios
 
       - name: Build for iPhone Simulator
         shell: bash

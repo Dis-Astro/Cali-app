@@ -17,7 +17,6 @@ interface CreateUserRequest {
   address?: string
   fiscal_code?: string
   emergency_contact?: string
-  bootstrap?: boolean // Flag per creazione primo admin
 }
 
 serve(async (req) => {
@@ -33,37 +32,9 @@ serve(async (req) => {
     // Create admin client for user creation
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
     
-    // Parse request body first to check for bootstrap
     const body: CreateUserRequest = await req.json()
-    console.log('Request received:', body.email, 'bootstrap:', body.bootstrap)
 
-    // Check if this is a bootstrap request (creating first admin)
-    if (body.bootstrap === true && body.role === 'admin') {
-      // Verify no admins exist in the system
-      const { count, error: countError } = await supabaseAdmin
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'admin')
-
-      if (countError) {
-        console.error('Count error:', countError)
-        return new Response(
-          JSON.stringify({ error: 'Errore nel verificare gli admin esistenti' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      if (count && count > 0) {
-        console.error('Admins already exist, bootstrap not allowed')
-        return new Response(
-          JSON.stringify({ error: 'Bootstrap non permesso: esistono già degli admin nel sistema' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      console.log('Bootstrap mode: creating first admin')
-    } else {
-      // Normal flow: require authentication
+    {
       const authHeader = req.headers.get('Authorization')
       if (!authHeader) {
         return new Response(
@@ -109,8 +80,6 @@ serve(async (req) => {
         )
       }
     }
-
-    console.log('Creating user:', body.email, 'with role:', body.role)
 
     // Validate required fields
     if (!body.email || !body.password || !body.first_name || !body.last_name || !body.role) {
@@ -158,8 +127,6 @@ serve(async (req) => {
       )
     }
 
-    console.log('User created:', newUser.user.id)
-
     // Create profile for the new user
     const { error: profileInsertError } = await supabaseAdmin
       .from('profiles')
@@ -184,8 +151,6 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-
-    console.log('Profile created successfully')
 
     return new Response(
       JSON.stringify({ 

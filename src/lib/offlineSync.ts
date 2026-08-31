@@ -56,7 +56,7 @@ const listeners = new Set<Listener>();
 let initialized = false;
 let flushPromise: Promise<void> | null = null;
 let retryTimer: number | null = null;
-let snapshot: OfflineSnapshot = {
+const snapshot: OfflineSnapshot = {
   isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   isSyncing: false,
   pendingCount: 0,
@@ -212,7 +212,9 @@ export async function initializeOfflineSync() {
 export function subscribeOfflineSync(listener: Listener) {
   listeners.add(listener);
   listener({ ...snapshot });
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function getOfflineSnapshot() {

@@ -7,9 +7,9 @@ interface WakeLockSentinelLike {
   addEventListener: (type: "release", listener: () => void) => void;
 }
 
-interface NavigatorWithWakeLock extends Navigator {
+type NavigatorWithWakeLock = Navigator & {
   wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
-}
+};
 
 export function useWorkoutTimer(config: WorkoutTimerConfig) {
   const [status, setStatus] = useState<WorkoutTimerStatus>("idle");

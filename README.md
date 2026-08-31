@@ -1,73 +1,40 @@
-# Welcome to your Lovable project
+# Super Power Gym
 
-## Project info
+App mobile e web per clienti, coach e amministrazione della palestra. La versione mobile usa Capacitor con progetto iOS nativo; dati e autenticazione sono gestiti da Supabase.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Requisiti
 
-## How can I edit this code?
+- Node.js 22
+- npm
+- Xcode 26 o successivo per iOS
 
-There are several ways of editing your application.
+## Avvio locale
 
-**Use Lovable**
+1. Copia `.env.example` in `.env` e inserisci le variabili Supabase.
+2. Esegui `npm ci`.
+3. Esegui `npm run dev` per il web.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Verifica completa
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm run check
 ```
 
-**Edit a file directly in GitHub**
+## iOS Simulator
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+npm run ios:prepare
+npm run ios:open
+```
 
-**Use GitHub Codespaces**
+In Xcode seleziona lo schema `App` e un simulatore iPhone. Per una build da terminale usa `npm run ios:build`.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Sicurezza
 
-## What technologies are used for this project?
+- `.env` non viene versionato.
+- Le funzioni amministrative Supabase richiedono un utente autenticato con ruolo `admin`.
+- Il primo amministratore va creato direttamente dal pannello Supabase, non tramite endpoint pubblico.
 
-This project is built with:
+## Branch
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+`main` è la sola linea stabile. I cambiamenti vanno sviluppati in branch brevi e integrati solo dopo `npm run check` e la build iOS.

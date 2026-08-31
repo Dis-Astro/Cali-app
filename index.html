@@ -40,6 +40,18 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      (() => {
+        const showStartupError = (detail) => {
+          const root = document.getElementById("root");
+          if (!root || root.childElementCount > 0) return;
+          root.innerHTML = `<main style="min-height:100vh;padding:calc(env(safe-area-inset-top) + 32px) 24px 32px;background:#100017;color:#fff;font:16px system-ui"><h1 style="font-size:22px">Avvio non riuscito</h1><p>${detail}</p></main>`;
+        };
+        window.addEventListener("error", () => showStartupError("Si è verificato un errore durante il caricamento dell’app."));
+        window.addEventListener("unhandledrejection", () => showStartupError("Il servizio non è disponibile. Riprova tra poco."));
+        window.setTimeout(() => showStartupError("L’app sta impiegando troppo tempo ad avviarsi. Chiudila e riprova."), 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

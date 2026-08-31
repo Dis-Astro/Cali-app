@@ -140,10 +140,11 @@ async function fetchInChunks(table: "workout_plan_exercises" | "workout_plans" |
 
   for (let i = 0; i < uniqueIds.length; i += IN_CHUNK_SIZE) {
     const chunk = uniqueIds.slice(i, i + IN_CHUNK_SIZE);
-    const { data, error } = await withReadRetry(() => (supabase.from(table) as any)
+    const result = await withReadRetry(() => (supabase.from(table) as any)
       .select(select)
       .in(column, chunk)
       .abortSignal(signal), signal);
+    const { data, error } = result as { data: any[] | null; error: Error | null };
 
     if (error) throw error;
     rows.push(...(data || []));

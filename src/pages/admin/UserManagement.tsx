@@ -36,7 +36,8 @@ const roleLabels: Record<UserRole, string> = {
   coach: "Coach",
   cliente_palestra: "Cliente Palestra",
   cliente_coaching: "Cliente Coaching",
-  cliente_corso: "Cliente Corso"
+  cliente_corso: "Cliente Corso",
+  segretaria: "Segreteria"
 };
 
 const roleBadgeVariant: Record<UserRole, "default" | "secondary" | "destructive" | "outline"> = {
@@ -44,7 +45,8 @@ const roleBadgeVariant: Record<UserRole, "default" | "secondary" | "destructive"
   coach: "default",
   cliente_palestra: "secondary",
   cliente_coaching: "outline",
-  cliente_corso: "secondary"
+  cliente_corso: "secondary",
+  segretaria: "outline"
 };
 
 const UserManagement = () => {
