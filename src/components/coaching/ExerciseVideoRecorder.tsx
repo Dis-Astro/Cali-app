@@ -4,12 +4,15 @@ import { Capacitor } from "@capacitor/core";
 import { Loader2, Video } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ExerciseVideoRecorderProps {
   exerciseName: string | null;
+  compact?: boolean;
+  className?: string;
 }
 
-const ExerciseVideoRecorder = ({ exerciseName }: ExerciseVideoRecorderProps) => {
+const ExerciseVideoRecorder = ({ exerciseName, compact = false, className }: ExerciseVideoRecorderProps) => {
   const [opening, setOpening] = useState(false);
 
   if (!Capacitor.isNativePlatform()) return null;
@@ -50,13 +53,13 @@ const ExerciseVideoRecorder = ({ exerciseName }: ExerciseVideoRecorderProps) => 
       type="button"
       variant="outline"
       size="sm"
-      className="gap-2 rounded-xl"
+      className={cn("gap-2 rounded-xl", className)}
       onClick={() => void recordVideo()}
       disabled={opening}
       aria-label={`Registra video${exerciseName ? ` per ${exerciseName}` : ""}`}
     >
       {opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-      {opening ? "Apertura…" : "Registra video"}
+      {opening ? "Apertura…" : compact ? "Video" : "Registra video"}
     </Button>
   );
 };

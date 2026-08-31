@@ -180,6 +180,23 @@ const OfflineWorkoutDayDetail = () => {
     }
   };
 
+  const openEvaluationAfterTimer = (exercise: Exercise) => {
+    const availableWeeks = exercise.weekCompletions.filter((week) => week.week_number <= currentWeek);
+    const targetWeek = availableWeeks.find((week) => week.week_number === currentWeek && !week.saved)
+      || [...availableWeeks].reverse().find((week) => !week.saved)
+      || availableWeeks.find((week) => week.week_number === currentWeek)
+      || availableWeeks[availableWeeks.length - 1];
+
+    setOpenExercises((previous) => new Set(previous).add(exercise.id));
+    if (!targetWeek) return;
+    window.setTimeout(() => {
+      document.getElementById(`evaluation-${exercise.id}-${targetWeek.week_number}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 180);
+  };
+
   if (loading && !plan) {
     return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
@@ -199,6 +216,12 @@ const OfflineWorkoutDayDetail = () => {
         {exercises.map((exercise, index) => {
           const isOpen = openExercises.has(exercise.id);
           const completed = exercise.weekCompletions.filter((week) => week.saved).length;
+          const availableWeeks = exercise.weekCompletions
+            .filter((week) => week.week_number <= currentWeek)
+            .sort((first, second) => second.week_number - first.week_number);
+          const missingPastWeeks = exercise.weekCompletions.filter(
+            (week) => week.week_number < currentWeek && !week.saved,
+          ).length;
           return (
             <Collapsible key={exercise.id} open={isOpen} onOpenChange={() => setOpenExercises((previous) => {
               const next = new Set(previous);
@@ -212,6 +235,7 @@ const OfflineWorkoutDayDetail = () => {
                     <div className="min-w-0 flex-1">
                       <p className="whitespace-pre-wrap break-words font-semibold">{exercise.exercise_name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{completed}/{totalWeeks} settimane valutate{exercise.rest_seconds ? ` · Recupero ${exercise.rest_seconds}s` : ""}</p>
+                      {missingPastWeeks > 0 && <p className="mt-1 text-xs font-medium text-amber-500">{missingPastWeeks} {missingPastWeeks === 1 ? "settimana passata da compilare" : "settimane passate da compilare"}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {exercise.video && <a href={exercise.video.video_url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="flex h-9 w-9 items-center justify-center rounded-xl border"><Play className="h-4 w-4" /></a>}
@@ -223,24 +247,28 @@ const OfflineWorkoutDayDetail = () => {
                   {exercise.notes && <div className="border-t bg-muted/40 p-4"><p className="mb-2 flex items-center gap-2 text-sm font-semibold"><MessageSquare className="h-4 w-4" />Nota del coach</p><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{exercise.notes}</p></div>}
                   {exercise.coachTestNote?.note && <div className="border-t border-orange-500/20 bg-orange-500/5 p-4"><p className="whitespace-pre-wrap break-words text-sm">{exercise.coachTestNote.note}</p></div>}
                   <CardContent className="space-y-3 p-4">
-                    {exercise.weekCompletions.filter((week) => week.week_number >= currentWeek).map((week) =>
-                      week.week_number > currentWeek ? (
-                        <div key={week.week_number} className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">Settimana {week.week_number} · Non disponibile</div>
-                      ) : (
-                        <div key={week.week_number} className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-                          <div className="mb-3 flex items-center justify-between"><span className="font-display text-xl">SETTIMANA {week.week_number}</span><div className="flex gap-2">{week.pending && <Badge variant="secondary">Da sincronizzare</Badge>}{week.saved && !week.pending && <CheckCircle2 className="h-5 w-5 text-primary" />}</div></div>
+                    {availableWeeks.map((week) =>
+                        <div id={`evaluation-${exercise.id}-${week.week_number}`} key={week.week_number} className="scroll-mt-24 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <span className="font-display text-xl">SETTIMANA {week.week_number}</span>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {week.week_number < currentWeek && !week.saved && <Badge variant="secondary">Da compilare</Badge>}
+                              {week.week_number === currentWeek && !week.saved && <Badge variant="secondary">Corrente</Badge>}
+                              {week.pending && <Badge variant="secondary">Da sincronizzare</Badge>}
+                              {week.saved && !week.pending && <CheckCircle2 className="h-5 w-5 text-primary" />}
+                            </div>
+                          </div>
                           <label className="mb-2 block text-sm text-muted-foreground">Valutazione dell’esercizio</label>
                           <LightningRating value={week.difficulty_rating} onChange={(value) => updateWeek(exercise.id, week.week_number, "difficulty_rating", value)} />
                           <Textarea value={week.client_notes} onChange={(event) => updateWeek(exercise.id, week.week_number, "client_notes", event.target.value)} placeholder="Aggiungi una nota per il coach..." className="my-3 min-h-24 resize-y" />
                           <Button className="w-full gap-2" disabled={saving === `${exercise.id}:${week.week_number}`} onClick={() => void saveWeek(exercise.id, week.week_number)}>{saving === `${exercise.id}:${week.week_number}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{week.saved ? "Aggiorna valutazione" : "Salva valutazione"}</Button>
                         </div>
-                      ),
                     )}
                   </CardContent>
                 </CollapsibleContent>
                 <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 bg-card/80 px-3 py-2">
                   <ExerciseVideoRecorder exerciseName={exercise.exercise_name} />
-                  <WorkoutTimerLauncher exerciseName={exercise.exercise_name} exerciseNotes={exercise.notes} />
+                  <WorkoutTimerLauncher exerciseName={exercise.exercise_name} exerciseNotes={exercise.notes} onComplete={() => openEvaluationAfterTimer(exercise)} />
                 </div>
               </Card>
             </Collapsible>
