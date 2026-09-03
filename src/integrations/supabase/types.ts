@@ -216,6 +216,82 @@ export type Database = {
           },
         ]
       }
+      course_fixed_assignments: {
+        Row: {
+          course_id: string
+          created_at: string
+          day_of_week: number
+          id: string
+          is_active: boolean
+          start_time: string
+          user_id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_active?: boolean
+          start_time: string
+          user_id: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_active?: boolean
+          start_time?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_fixed_assignments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      course_bookings: {
+        Row: {
+          booking_type: string
+          course_session_id: string
+          created_at: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_type: string
+          course_session_id: string
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_type?: string
+          course_session_id?: string
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_bookings_course_session_id_fkey"
+            columns: ["course_session_id"]
+            isOneToOne: false
+            referencedRelation: "course_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       course_sessions: {
         Row: {
           cancellation_reason: string | null
@@ -224,6 +300,9 @@ export type Database = {
           end_time: string
           id: string
           is_cancelled: boolean
+          fixed_places: number
+          floating_places: number | null
+          max_participants: number | null
           start_time: string
         }
         Insert: {
@@ -233,6 +312,9 @@ export type Database = {
           end_time: string
           id?: string
           is_cancelled?: boolean
+          fixed_places?: number
+          floating_places?: number | null
+          max_participants?: number | null
           start_time: string
         }
         Update: {
@@ -242,6 +324,9 @@ export type Database = {
           end_time?: string
           id?: string
           is_cancelled?: boolean
+          fixed_places?: number
+          floating_places?: number | null
+          max_participants?: number | null
           start_time?: string
         }
         Relationships: [
@@ -1018,6 +1103,20 @@ export type Database = {
       is_admin: { Args: { user_uuid: string }; Returns: boolean }
       is_coach: { Args: { user_uuid: string }; Returns: boolean }
       is_staff: { Args: { user_uuid: string }; Returns: boolean }
+      course_day_group: { Args: { local_day: number }; Returns: number }
+      manage_course_booking: {
+        Args: { p_action: string; p_session_id: string }
+        Returns: Json
+      }
+      get_course_session_availability: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          booked: number
+          fixed_booked: number
+          floating_booked: number
+          session_id: string
+        }[]
+      }
     }
     Enums: {
       error_report_status: "aperta" | "in_lavorazione" | "risolta" | "chiusa"

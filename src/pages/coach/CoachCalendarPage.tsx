@@ -17,6 +17,7 @@ import {
 import CoachLayout from "@/components/coach/CoachLayout";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
+import CourseRosterManagement from "@/components/courses/CourseRosterManagement";
 
 interface Appointment {
   id: string;
@@ -247,6 +248,7 @@ const CoachCalendarPage = () => {
           </CardContent>
         </Card>
       </div>
+      {profile?.user_id && <CourseRosterManagement coachId={profile.user_id} />}
     </CoachLayout>
   );
 };

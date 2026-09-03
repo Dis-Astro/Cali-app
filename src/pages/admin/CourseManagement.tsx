@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Loader2, Edit, Trash2, UserPlus, X } from "lucide-react";
+import { Users, Plus, Loader2, Edit, Trash2, UserPlus, X, CalendarClock } from "lucide-react";
+import CourseRosterManagement from "@/components/courses/CourseRosterManagement";
 
 interface Course {
   id: string;
@@ -41,6 +42,17 @@ interface CourseParticipant {
   joined_at: string;
 }
 
+interface FixedAssignment {
+  id: string;
+  course_id: string;
+  user_id: string;
+  day_of_week: number;
+  start_time: string;
+  is_active: boolean;
+}
+
+const fixedDayLabels: Record<number, string> = { 1: "Lun", 2: "Mar", 3: "Mer", 4: "Gio", 5: "Ven", 6: "Sab", 7: "Dom" };
+
 const CourseManagement = () => {
   const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -56,9 +68,13 @@ const CourseManagement = () => {
   const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [participants, setParticipants] = useState<CourseParticipant[]>([]);
+  const [fixedAssignments, setFixedAssignments] = useState<FixedAssignment[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [addingParticipant, setAddingParticipant] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [participantType, setParticipantType] = useState<"floating" | "fixed">("floating");
+  const [fixedDay, setFixedDay] = useState("1");
+  const [fixedTime, setFixedTime] = useState("18:00");
   
   const [formData, setFormData] = useState({
     name: "",
@@ -178,12 +194,12 @@ const CourseManagement = () => {
 
   const fetchParticipants = async (courseId: string) => {
     setLoadingParticipants(true);
-    const { data } = await supabase
-      .from("course_participants")
-      .select("*")
-      .eq("course_id", courseId)
-      .order("joined_at", { ascending: false });
-    setParticipants(data || []);
+    const [participantsResult, assignmentsResult] = await Promise.all([
+      supabase.from("course_participants").select("*").eq("course_id", courseId).order("joined_at", { ascending: false }),
+      supabase.from("course_fixed_assignments").select("*").eq("course_id", courseId).eq("is_active", true),
+    ]);
+    setParticipants(participantsResult.data || []);
+    setFixedAssignments(assignmentsResult.data || []);
     setLoadingParticipants(false);
   };
 
@@ -204,6 +220,17 @@ const CourseManagement = () => {
     if (error) {
       toast({ title: "Errore", description: "Impossibile aggiungere il partecipante", variant: "destructive" });
     } else {
+      if (participantType === "fixed") {
+        const { error: assignmentError } = await supabase.from("course_fixed_assignments").insert({
+          course_id: selectedCourse.id,
+          user_id: selectedClientId,
+          day_of_week: Number(fixedDay),
+          start_time: `${fixedTime}:00`,
+        });
+        if (assignmentError) {
+          toast({ title: "Iscritto senza turno fisso", description: assignmentError.message, variant: "destructive" });
+        }
+      }
       toast({ title: "Aggiunto", description: "Partecipante aggiunto al corso" });
       setSelectedClientId("");
       await fetchParticipants(selectedCourse.id);
@@ -211,8 +238,34 @@ const CourseManagement = () => {
     setAddingParticipant(false);
   };
 
+  const addFixedAssignment = async (userId: string) => {
+    if (!selectedCourse) return;
+    const { error } = await supabase.from("course_fixed_assignments").insert({
+      course_id: selectedCourse.id,
+      user_id: userId,
+      day_of_week: Number(fixedDay),
+      start_time: `${fixedTime}:00`,
+    });
+    if (error) toast({ title: "Turno non assegnato", description: error.message, variant: "destructive" });
+    else {
+      toast({ title: "Turno fisso assegnato" });
+      await fetchParticipants(selectedCourse.id);
+    }
+  };
+
+  const removeFixedAssignment = async (assignmentId: string) => {
+    if (!selectedCourse) return;
+    const { error } = await supabase.from("course_fixed_assignments").delete().eq("id", assignmentId);
+    if (error) toast({ title: "Errore", description: "Impossibile rimuovere il turno fisso", variant: "destructive" });
+    else await fetchParticipants(selectedCourse.id);
+  };
+
   const removeParticipant = async (participantId: string) => {
     if (!selectedCourse) return;
+    const participant = participants.find((item) => item.id === participantId);
+    if (participant) {
+      await supabase.from("course_fixed_assignments").delete().eq("course_id", selectedCourse.id).eq("user_id", participant.user_id);
+    }
     const { error } = await supabase
       .from("course_participants")
       .delete()
@@ -371,6 +424,8 @@ const CourseManagement = () => {
         </CardContent>
       </Card>
 
+      <CourseRosterManagement />
+
       {/* Participants Dialog */}
       <Dialog open={participantsDialogOpen} onOpenChange={setParticipantsDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
@@ -383,8 +438,8 @@ const CourseManagement = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Add participant */}
-          <div className="flex gap-2">
+          <div className="rounded-xl border border-border p-3 space-y-3">
+            <div className="flex gap-2">
             <Select value={selectedClientId} onValueChange={setSelectedClientId}>
               <SelectTrigger className="flex-1">
                 <SelectValue placeholder="Seleziona un utente..." />
@@ -400,6 +455,19 @@ const CourseManagement = () => {
             <Button onClick={addParticipant} disabled={!selectedClientId || addingParticipant} size="sm">
               {addingParticipant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Select value={participantType} onValueChange={(value: "floating" | "fixed") => setParticipantType(value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="floating">Vagante</SelectItem><SelectItem value="fixed">Fisso</SelectItem></SelectContent>
+              </Select>
+              <Select value={fixedDay} onValueChange={setFixedDay}>
+                <SelectTrigger disabled={participantType === "floating"}><SelectValue /></SelectTrigger>
+                <SelectContent>{Object.entries(fixedDayLabels).map(([day, label]) => <SelectItem key={day} value={day}>{label}</SelectItem>)}</SelectContent>
+              </Select>
+              <Input type="time" value={fixedTime} onChange={(event) => setFixedTime(event.target.value)} disabled={participantType === "floating"} />
+            </div>
+            <p className="text-xs text-muted-foreground">Per i posti fissi scegli giorno e ora; ogni atleta dovrà comunque confermare ogni settimana.</p>
           </div>
 
           {/* Participants list */}
@@ -416,16 +484,29 @@ const CourseManagement = () => {
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">{participants.length} iscritti</p>
               {participants.map(p => (
-                <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card">
-                  <div>
+                <div key={p.id} className="p-3 rounded-lg border border-border bg-card">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
                     <p className="font-medium text-sm">{getClientName(p.user_id)}</p>
                     <p className="text-xs text-muted-foreground">
                       Iscritto dal {new Date(p.joined_at).toLocaleDateString("it-IT")}
                     </p>
-                  </div>
+                    </div>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeParticipant(p.id)}>
                     <X className="w-4 h-4 text-destructive" />
                   </Button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {fixedAssignments.filter((assignment) => assignment.user_id === p.user_id).map((assignment) => (
+                      <Badge key={assignment.id} variant="secondary" className="gap-1">
+                        Fisso {fixedDayLabels[assignment.day_of_week]} {assignment.start_time.slice(0, 5)}
+                        <button type="button" onClick={() => void removeFixedAssignment(assignment.id)} aria-label="Rimuovi turno fisso"><X className="h-3 w-3" /></button>
+                      </Badge>
+                    ))}
+                    <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void addFixedAssignment(p.user_id)}>
+                      <CalendarClock className="h-3.5 w-3.5" />Assegna {fixedDayLabels[Number(fixedDay)]} {fixedTime}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

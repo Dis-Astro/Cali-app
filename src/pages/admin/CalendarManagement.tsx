@@ -88,6 +88,9 @@ interface CourseSession {
   start_time: string;
   end_time: string;
   is_cancelled: boolean;
+  max_participants: number | null;
+  fixed_places: number;
+  floating_places: number | null;
   course?: Course;
 }
 
@@ -188,7 +191,10 @@ const CalendarManagement = () => {
   const [courseSessionEndTime, setCourseSessionEndTime] = useState("10:00");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [newCourseSession, setNewCourseSession] = useState({
-    course_id: ""
+    course_id: "",
+    max_participants: "10",
+    fixed_places: "7",
+    floating_places: "3",
   });
 
   const weekDays = [
@@ -449,6 +455,14 @@ const CalendarManagement = () => {
       return;
     }
 
+    const maximum = Number.parseInt(newCourseSession.max_participants, 10);
+    const fixedPlaces = Number.parseInt(newCourseSession.fixed_places, 10) || 0;
+    const floatingPlaces = Number.parseInt(newCourseSession.floating_places, 10) || 0;
+    if (!Number.isFinite(maximum) || maximum < 1 || fixedPlaces < 0 || floatingPlaces < 0 || fixedPlaces + floatingPlaces > maximum) {
+      toast({ title: "Capienza non valida", description: "Posti fissi + vaganti non possono superare la capienza totale.", variant: "destructive" });
+      return;
+    }
+
     const [startH, startM] = courseSessionStartTime.split(":").map(Number);
     const [endH, endM] = courseSessionEndTime.split(":").map(Number);
     
@@ -473,7 +487,10 @@ const CalendarManagement = () => {
         sessionsToCreate.push({
           course_id: newCourseSession.course_id,
           start_time: startDateTime.toISOString(),
-          end_time: endDateTime.toISOString()
+          end_time: endDateTime.toISOString(),
+          max_participants: maximum,
+          fixed_places: fixedPlaces,
+          floating_places: floatingPlaces,
         });
         
         currentDateIter = addDays(currentDateIter, 7);
@@ -488,7 +505,7 @@ const CalendarManagement = () => {
       const daysText = selectedDays.map(d => weekDays.find(w => w.value === d)?.short).join(", ");
       toast({ title: "Successo", description: `Create ${sessionsToCreate.length} sessioni per ${daysText} (1 anno)` });
       setIsCourseSessionDialogOpen(false);
-      setNewCourseSession({ course_id: "" });
+      setNewCourseSession({ course_id: "", max_participants: "10", fixed_places: "7", floating_places: "3" });
       setSelectedDays([]);
       setCourseSessionStartTime("09:00");
       setCourseSessionEndTime("10:00");
@@ -844,7 +861,10 @@ const CalendarManagement = () => {
                 <div className="grid gap-4 py-4">
                   <div className="space-y-2">
                     <Label>Corso *</Label>
-                    <Select value={newCourseSession.course_id} onValueChange={(v) => setNewCourseSession({ ...newCourseSession, course_id: v })}>
+                    <Select value={newCourseSession.course_id} onValueChange={(v) => {
+                      const courseMaximum = courses.find((course) => course.id === v)?.max_participants ?? 10;
+                      setNewCourseSession({ course_id: v, max_participants: String(courseMaximum), fixed_places: "0", floating_places: String(courseMaximum) });
+                    }}>
                       <SelectTrigger><SelectValue placeholder="Seleziona corso" /></SelectTrigger>
                       <SelectContent>
                         {courses.map(c => (
@@ -852,6 +872,22 @@ const CalendarManagement = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 rounded-xl border border-border p-3">
+                    <div className="space-y-2">
+                      <Label>Capienza</Label>
+                      <Input type="number" min="1" inputMode="numeric" value={newCourseSession.max_participants} onChange={(e) => setNewCourseSession({ ...newCourseSession, max_participants: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fissi</Label>
+                      <Input type="number" min="0" inputMode="numeric" value={newCourseSession.fixed_places} onChange={(e) => setNewCourseSession({ ...newCourseSession, fixed_places: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Vaganti</Label>
+                      <Input type="number" min="0" inputMode="numeric" value={newCourseSession.floating_places} onChange={(e) => setNewCourseSession({ ...newCourseSession, floating_places: e.target.value })} />
+                    </div>
+                    <p className="col-span-3 text-xs text-muted-foreground">Fissi + vaganti deve essere minore o uguale alla capienza.</p>
                   </div>
                   
                   <div className="space-y-2">
@@ -1305,7 +1341,12 @@ const CalendarManagement = () => {
                       <div className="text-xs text-muted-foreground">
                         {format(parseISO(session.start_time), "HH:mm")} - {format(parseISO(session.end_time), "HH:mm")}
                       </div>
-                      <Badge variant="secondary" className="mt-1 text-[10px]">Corso</Badge>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <Badge variant="secondary" className="text-[10px]">Corso</Badge>
+                        <Badge variant="outline" className="text-[10px]">Capienza {session.max_participants ?? session.course?.max_participants ?? "∞"}</Badge>
+                        <Badge variant="outline" className="text-[10px]">Fissi {session.fixed_places ?? 0}</Badge>
+                        <Badge variant="outline" className="text-[10px]">Vaganti {session.floating_places ?? 0}</Badge>
+                      </div>
                     </div>
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => setDeleteCourseSessionId(session.id)}>
                       <Trash2 className="w-3 h-3" />

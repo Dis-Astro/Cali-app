@@ -19,29 +19,13 @@ import CoachLayout from "@/components/coach/CoachLayout";
 import LightningRating from "@/components/coaching/LightningRating";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
+import { ColoredKeywordText } from "@/components/shared/ColoredKeywordText";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-const COLOR_MAP: Record<string, string> = {
-  arancione: "#f97316", azzurro: "#38bdf8", verde: "#22c55e",
-  giallo: "#eab308", rosso: "#ef4444", blu: "#3b82f6", viola: "#a855f7",
-};
-
-function renderColoredText(value: string) {
-  const lines = value.split(/(\n)/);
-  return lines.map((line, lineIdx) => {
-    if (line === "\n") return <br key={`br-${lineIdx}`} />;
-    const tokens = line.split(/(\s+)/);
-    return tokens.map((token, i) => {
-      const color = COLOR_MAP[token.toLowerCase().replace(/[^a-zàèéìòù]/gi, "")];
-      if (color) return <span key={`${lineIdx}-${i}`} style={{ color, fontWeight: 700 }}>{token}</span>;
-      return <span key={`${lineIdx}-${i}`}>{token}</span>;
-    });
-  });
-}
 
 interface ClientSummary {
   id: string;
@@ -355,7 +339,7 @@ const CoachReportsPage = () => {
                                   <div className="flex items-center gap-3 text-left">
                                     <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0">{idx + 1}</span>
                                     <div>
-                                      <p className="font-medium text-sm whitespace-pre-wrap">{renderColoredText(exercise.name)}</p>
+                                      <p className="font-medium text-sm whitespace-pre-wrap"><ColoredKeywordText text={exercise.name} /></p>
                                       <p className="text-xs text-muted-foreground">{exercise.weeks.length} settimane valutate</p>
                                     </div>
                                   </div>

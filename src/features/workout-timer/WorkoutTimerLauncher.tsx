@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExerciseVideoRecorder from "@/components/coaching/ExerciseVideoRecorder";
+import { ColoredKeywordText } from "@/components/shared/ColoredKeywordText";
 import {
   Sheet,
   SheetContent,
@@ -393,8 +394,8 @@ function WorkoutTimerScreen({
       {(exerciseName || exerciseNotes) && (
         <section className="mx-4 max-h-28 shrink-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-left native-safe-x">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Esercizio</p>
-          {exerciseName && <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-white/90">{exerciseName}</p>}
-          {exerciseNotes && <p className="mt-2 whitespace-pre-wrap break-words border-t border-white/10 pt-2 text-xs leading-relaxed text-white/65">{exerciseNotes}</p>}
+          {exerciseName && <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-white/90"><ColoredKeywordText text={exerciseName} /></p>}
+          {exerciseNotes && <p className="mt-2 whitespace-pre-wrap break-words border-t border-white/10 pt-2 text-xs leading-relaxed text-white/65"><ColoredKeywordText text={exerciseNotes} /></p>}
         </section>
       )}
 

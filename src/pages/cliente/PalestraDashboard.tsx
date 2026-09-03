@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { it } from "date-fns/locale";
+import ClientCourseBooking from "@/components/courses/ClientCourseBooking";
 
 interface GymHour {
   day_of_week: number;
@@ -123,6 +124,7 @@ const PalestraDashboard = () => {
           </div>
         ) : (
           <>
+            {profile?.user_id && <ClientCourseBooking userId={profile.user_id} />}
             <Card className={`mb-6 ${subscription ? (daysRemaining <= 7 ? "border-destructive/50" : "border-green-500/50") : "border-muted"}`}>
               <CardHeader>
                 <CardTitle className="font-display tracking-wider flex items-center gap-2">

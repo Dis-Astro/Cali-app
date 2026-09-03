@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import LightningRating from "./LightningRating";
 import WorkoutTimerLauncher from "@/features/workout-timer/WorkoutTimerLauncher";
 import ExerciseVideoRecorder from "./ExerciseVideoRecorder";
+import { ColoredKeywordText } from "@/components/shared/ColoredKeywordText";
 
 const OfflineWorkoutDayDetail = () => {
   const { dayId } = useParams<{ dayId: string }>();
@@ -233,7 +234,7 @@ const OfflineWorkoutDayDetail = () => {
                   <button type="button" data-testid="exercise-toggle" className="flex w-full items-start gap-3 p-4 text-left">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-primary">{index + 1}</div>
                     <div className="min-w-0 flex-1">
-                      <p className="whitespace-pre-wrap break-words font-semibold">{exercise.exercise_name}</p>
+                      <p className="whitespace-pre-wrap break-words font-semibold"><ColoredKeywordText text={exercise.exercise_name} /></p>
                       <p className="mt-1 text-xs text-muted-foreground">{completed}/{totalWeeks} settimane valutate{exercise.rest_seconds ? ` · Recupero ${exercise.rest_seconds}s` : ""}</p>
                       {missingPastWeeks > 0 && <p className="mt-1 text-xs font-medium text-amber-500">{missingPastWeeks} {missingPastWeeks === 1 ? "settimana passata da compilare" : "settimane passate da compilare"}</p>}
                     </div>
@@ -244,8 +245,8 @@ const OfflineWorkoutDayDetail = () => {
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  {exercise.notes && <div className="border-t bg-muted/40 p-4"><p className="mb-2 flex items-center gap-2 text-sm font-semibold"><MessageSquare className="h-4 w-4" />Nota del coach</p><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{exercise.notes}</p></div>}
-                  {exercise.coachTestNote?.note && <div className="border-t border-orange-500/20 bg-orange-500/5 p-4"><p className="whitespace-pre-wrap break-words text-sm">{exercise.coachTestNote.note}</p></div>}
+                  {exercise.notes && <div className="border-t bg-muted/40 p-4"><p className="mb-2 flex items-center gap-2 text-sm font-semibold"><MessageSquare className="h-4 w-4" />Nota del coach</p><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground"><ColoredKeywordText text={exercise.notes} /></p></div>}
+                  {exercise.coachTestNote?.note && <div className="border-t border-orange-500/20 bg-orange-500/5 p-4"><p className="whitespace-pre-wrap break-words text-sm"><ColoredKeywordText text={exercise.coachTestNote.note} /></p></div>}
                   <CardContent className="space-y-3 p-4">
                     {availableWeeks.map((week) =>
                         <div id={`evaluation-${exercise.id}-${week.week_number}`} key={week.week_number} className="scroll-mt-24 rounded-2xl border border-primary/30 bg-primary/5 p-4">

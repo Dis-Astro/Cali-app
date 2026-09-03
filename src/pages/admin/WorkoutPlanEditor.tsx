@@ -38,24 +38,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { syncTestReminderAppointment } from "@/lib/testReminder";
-
-const COLOR_MAP: Record<string, string> = {
-  arancione: "#f97316", azzurro: "#38bdf8", verde: "#22c55e",
-  giallo: "#eab308", rosso: "#ef4444", blu: "#3b82f6", viola: "#a855f7",
-};
-
-function renderColoredText(value: string) {
-  const lines = value.split(/(\n)/);
-  return lines.map((line, lineIdx) => {
-    if (line === "\n") return <br key={`br-${lineIdx}`} />;
-    const tokens = line.split(/(\s+)/);
-    return tokens.map((token, i) => {
-      const color = COLOR_MAP[token.toLowerCase().replace(/[^a-zàèéìòù]/gi, "")];
-      if (color) return <span key={`${lineIdx}-${i}`} style={{ color, fontWeight: 700 }}>{token}</span>;
-      return <span key={`${lineIdx}-${i}`}>{token}</span>;
-    });
-  });
-}
+import { ColoredKeywordText } from "@/components/shared/ColoredKeywordText";
 
 // ─── Types ───
 interface DayExercise {
@@ -551,7 +534,7 @@ const WorkoutPlanEditor = () => {
                       <div className={`px-3 py-2 flex items-center justify-between text-left ${hasFeedback ? 'hover:bg-muted/30 cursor-pointer' : ''}`}>
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-medium flex-shrink-0">{idx + 1}</span>
-                          <p className="text-xs whitespace-pre-wrap">{ex.exercise_name ? renderColoredText(ex.exercise_name) : "Esercizio"}</p>
+                          <p className="text-xs whitespace-pre-wrap">{ex.exercise_name ? <ColoredKeywordText text={ex.exercise_name} /> : "Esercizio"}</p>
                         </div>
                         {hasFeedback && (
                           <div className="flex items-center gap-1">
@@ -654,7 +637,7 @@ const WorkoutPlanEditor = () => {
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-muted-foreground text-xs">{idx + 1}.</span>
                         <p className="text-xs truncate whitespace-pre-wrap">
-                          {ex.exercise_name ? renderColoredText(ex.exercise_name) : "Esercizio"}
+                          {ex.exercise_name ? <ColoredKeywordText text={ex.exercise_name} /> : "Esercizio"}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
