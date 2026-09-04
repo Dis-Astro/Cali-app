@@ -385,6 +385,30 @@ const CourseManagement = () => {
               <p>Nessun corso creato</p>
             </div>
           ) : (
+            <>
+            <div className="space-y-3 md:hidden">
+              {courses.map((course) => (
+                <div key={course.id} className="rounded-2xl border border-border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2"><div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: course.color }} /><p className="font-semibold">{course.name}</p></div>
+                      <p className="mt-1 text-xs text-muted-foreground">Coach: {getCoachName(course.coach_id)} · {course.duration_minutes} min</p>
+                    </div>
+                    <Badge variant={course.is_active ? "default" : "secondary"}>{course.is_active ? "Attivo" : "Disattivo"}</Badge>
+                  </div>
+                  <button type="button" className="mt-3 grid w-full grid-cols-2 gap-2 text-center" onClick={() => openParticipantsDialog(course)}>
+                    <span className="rounded-xl bg-primary/10 p-3"><strong className="block text-xl text-primary">{participantCounts[course.id] ?? 0}</strong><span className="text-xs text-muted-foreground">iscritti</span></span>
+                    <span className="rounded-xl bg-muted/50 p-3"><strong className="block text-xl">{course.max_participants || "∞"}</strong><span className="text-xs text-muted-foreground">capienza</span></span>
+                  </button>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <Button variant="secondary" size="sm" className="gap-1" onClick={() => openParticipantsDialog(course)}><UserPlus className="h-4 w-4" />Iscritti</Button>
+                    <Button variant="outline" size="sm" className="gap-1" onClick={() => openEditDialog(course)}><Edit className="h-4 w-4" />Modifica</Button>
+                    <Button variant="ghost" size="sm" className="gap-1 text-destructive" onClick={() => deleteCourse(course.id)}><Trash2 className="h-4 w-4" />Elimina</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -433,6 +457,8 @@ const CourseManagement = () => {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
