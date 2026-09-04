@@ -40,6 +40,7 @@ interface AuthContextType {
 
 const PROFILE_CACHE_PREFIX = "spg:auth:profile:";
 const LAST_USER_KEY = "spg:auth:last-user";
+const PROFILE_RETRY_DELAYS_MS = [0, 1200, 2500];
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 async function readCachedProfile(userId: string): Promise<Profile | null> {
@@ -74,29 +75,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return cached;
     }
 
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!data) return cached;
-
-      const fresh = data as Profile;
-      setProfile(fresh);
-      await writeCachedProfile(fresh);
-      if (fresh.role === "cliente_coaching") {
-        void downloadWorkoutPlanForOffline(fresh.user_id).catch((error) =>
-          console.warn("Precaricamento scheda offline non riuscito:", error),
-        );
+    let lastError: unknown;
+    for (let attempt = 0; attempt < PROFILE_RETRY_DELAYS_MS.length; attempt++) {
+      if (PROFILE_RETRY_DELAYS_MS[attempt]) {
+        await new Promise((resolve) => window.setTimeout(resolve, PROFILE_RETRY_DELAYS_MS[attempt]));
       }
-      return fresh;
-    } catch (error) {
-      if (!cached) console.error("Error fetching profile:", error);
-      return cached;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return cached;
+
+        const fresh = data as Profile;
+        setProfile(fresh);
+        await writeCachedProfile(fresh);
+        if (fresh.role === "cliente_coaching") {
+          void downloadWorkoutPlanForOffline(fresh.user_id).catch((error) =>
+            console.warn("Precaricamento scheda offline non riuscito:", error),
+          );
+        }
+        return fresh;
+      } catch (error) {
+        lastError = error;
+      }
     }
+    if (!cached) console.error("Error fetching profile after retry:", lastError);
+    return cached;
   };
 
   useEffect(() => {

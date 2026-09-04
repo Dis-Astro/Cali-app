@@ -24,14 +24,18 @@ const page = await context.newPage();
 const report = [];
 const consoleErrors = [];
 const networkErrors = [];
+const recoveredResponses = new Set();
 
 page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text());
 });
 page.on('pageerror', (error) => consoleErrors.push(error.message));
 page.on('response', (response) => {
+  const requestKey = `${response.request().method()} ${response.url()}`;
   if (response.status() >= 400) {
     networkErrors.push({ status: response.status(), method: response.request().method(), url: response.url() });
+  } else {
+    recoveredResponses.add(requestKey);
   }
 });
 
@@ -230,10 +234,14 @@ for (const [route, name] of roleRoutes[detectedRole]) await saveViewport(route, 
 if (detectedRole === 'cliente_coaching') await captureCoachingFlow();
 if (detectedRole === 'admin') await captureAdminFlow();
 
-const uniqueConsoleErrors = [...new Set(consoleErrors)];
+let uniqueConsoleErrors = [...new Set(consoleErrors)];
 const uniqueNetworkErrors = networkErrors.filter((item, index, array) =>
-  array.findIndex((candidate) => candidate.status === item.status && candidate.method === item.method && candidate.url === item.url) === index
+  !recoveredResponses.has(`${item.method} ${item.url}`)
+  && array.findIndex((candidate) => candidate.status === item.status && candidate.method === item.method && candidate.url === item.url) === index
 );
+if (uniqueNetworkErrors.length === 0) {
+  uniqueConsoleErrors = uniqueConsoleErrors.filter((message) => !message.startsWith('Failed to load resource:'));
+}
 
 await fs.writeFile(path.join(outputDir, 'audit-report.json'), JSON.stringify({
   generatedAt: new Date().toISOString(),
