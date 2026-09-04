@@ -219,11 +219,11 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
                         <Button
                           className="mt-3 w-full"
                           variant={activeBooking ? "outline" : declined ? "secondary" : habitual ? "default" : "secondary"}
-                          disabled={savingId === session.id || (unavailable && !declined) || (closed && !activeBooking)}
+                          disabled={savingId === session.id || closed || (unavailable && !declined)}
                           onClick={() => void action(session, activeBooking ? "cancel" : "confirm")}
                         >
                           {savingId === session.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          {activeBooking ? "Annulla presenza" : declined ? "Cambio idea: partecipo" : closed ? "Conferme chiuse" : unavailable ? (remaining === 0 ? "Turno completo" : "Hai già scelto il turno") : habitual ? "Conferma presenza" : "Prenota posto occasionale"}
+                          {closed ? "Conferme chiuse" : activeBooking ? "Annulla presenza" : declined ? "Cambio idea: partecipo" : unavailable ? (remaining === 0 ? "Turno completo" : "Hai già scelto il turno") : habitual ? "Conferma presenza" : "Prenota posto occasionale"}
                         </Button>
                       )}
                     </div>
