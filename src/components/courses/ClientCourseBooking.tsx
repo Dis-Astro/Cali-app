@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { endOfWeek, format, getISODay, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
-import { CalendarCheck2, CheckCircle2, Loader2, RefreshCw, Users } from "lucide-react";
+import { Bell, CalendarCheck2, CheckCircle2, Loader2, RefreshCw, UserRoundX, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { courseRemindersAvailable, courseRemindersEnabled, enableCourseReminders, syncCourseReminders } from "@/features/course-booking/courseReminders";
 
 interface CourseSession {
   id: string;
@@ -16,6 +17,7 @@ interface CourseSession {
   max_participants: number | null;
   fixed_places: number;
   floating_places: number | null;
+  confirmation_deadline_hours?: number;
   course: { name: string; color: string | null; max_participants: number | null } | null;
 }
 
@@ -51,6 +53,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
   const [enrolled, setEnrolled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [remindersOn, setRemindersOn] = useState(courseRemindersEnabled());
 
   const week = useMemo(() => ({
     start: startOfWeek(new Date(), { weekStartsOn: 1 }),
@@ -76,7 +79,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
     const [sessionsResult, bookingsResult, assignmentsResult, availabilityResult] = await Promise.all([
       supabase
         .from("course_sessions")
-        .select("id, course_id, start_time, end_time, max_participants, fixed_places, floating_places, course:courses(name, color, max_participants)")
+        .select("id, course_id, start_time, end_time, max_participants, fixed_places, floating_places, confirmation_deadline_hours, course:courses(name, color, max_participants)")
         .in("course_id", courseIds)
         .eq("is_cancelled", false)
         .gte("start_time", week.start.toISOString())
@@ -98,6 +101,10 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
+    if (sessions.length) void syncCourseReminders(sessions, fixedAssignments, bookings);
+  }, [bookings, fixedAssignments, sessions]);
+
+  useEffect(() => {
     const channel = supabase
       .channel(`course-bookings-client-${userId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "course_bookings" }, () => void load())
@@ -106,7 +113,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
     return () => { void supabase.removeChannel(channel); };
   }, [load, userId]);
 
-  const bookingFor = (sessionId: string) => bookings.find((booking) => booking.course_session_id === sessionId && activeStatuses.has(booking.status));
+  const bookingFor = (sessionId: string) => bookings.find((booking) => booking.course_session_id === sessionId);
   const isFixed = (session: CourseSession) => {
     const start = new Date(session.start_time);
     return fixedAssignments.some((assignment) =>
@@ -130,6 +137,17 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
     setSavingId(null);
   };
 
+  const activateReminders = async () => {
+    const enabled = await enableCourseReminders();
+    setRemindersOn(enabled);
+    if (!enabled) {
+      toast.error("Notifiche non abilitate", { description: "Puoi abilitarle dalle impostazioni dell’iPhone." });
+      return;
+    }
+    await syncCourseReminders(sessions, fixedAssignments, bookings);
+    toast.success("Promemoria attivati");
+  };
+
   if (loading) return <Card className="mb-6"><CardContent className="flex justify-center py-10"><Loader2 className="h-7 w-7 animate-spin text-primary" /></CardContent></Card>;
   if (!enrolled) return null;
   if (!sessions.length) return (
@@ -145,16 +163,22 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 font-display tracking-wider"><CalendarCheck2 className="h-5 w-5 text-primary" />QUESTA SETTIMANA</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">Conferma un turno tra lun–mar e uno tra mer–gio.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Conferma un turno tra lun–mar e uno tra mer–gio, entro 6 ore dall’inizio.</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => void load()} aria-label="Aggiorna disponibilità"><RefreshCw className="h-4 w-4" /></Button>
+          <div className="flex gap-1">
+            {courseRemindersAvailable() && <Button variant={remindersOn ? "secondary" : "outline"} size="sm" className="gap-1" onClick={() => void activateReminders()}><Bell className="h-4 w-4" />{remindersOn ? "Promemoria attivi" : "Avvisami"}</Button>}
+            <Button variant="ghost" size="icon" onClick={() => void load()} aria-label="Aggiorna disponibilità"><RefreshCw className="h-4 w-4" /></Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
         {[1, 2].map((group) => {
           const groupSessions = sessions.filter((session) => groupForDay(getISODay(new Date(session.start_time))) === group);
           if (!groupSessions.length) return null;
-          const selected = groupSessions.find((session) => bookingFor(session.id));
+          const selected = groupSessions.find((session) => {
+            const booking = bookingFor(session.id);
+            return booking && activeStatuses.has(booking.status);
+          });
           return (
             <section key={group}>
               <div className="mb-2 flex items-center justify-between">
@@ -165,30 +189,43 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
                 {groupSessions.map((session) => {
                   const start = new Date(session.start_time);
                   const booking = bookingFor(session.id);
+                  const activeBooking = booking && activeStatuses.has(booking.status);
+                  const declined = booking?.status === "cancelled" || booking?.status === "absent";
                   const habitual = isFixed(session);
                   const remaining = placesLeft(session);
-                  const unavailable = !booking && (Boolean(selected) || remaining === 0);
+                  const deadlineHours = session.confirmation_deadline_hours ?? 6;
+                  const deadline = new Date(start.getTime() - deadlineHours * 60 * 60 * 1000);
+                  const closed = Date.now() >= deadline.getTime();
+                  const unavailable = !activeBooking && !declined && (Boolean(selected) || remaining === 0 || closed);
                   return (
-                    <div key={session.id} className={`rounded-xl border p-3 ${booking ? "border-primary bg-primary/5" : "border-border"}`}>
+                    <div key={session.id} className={`rounded-xl border p-3 ${activeBooking ? "border-primary bg-primary/5" : declined ? "border-destructive/30 bg-destructive/5" : "border-border"}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-semibold capitalize">{format(start, "EEEE HH:mm", { locale: it })}</p>
-                          <p className="text-xs text-muted-foreground">{session.course?.name}{habitual ? " · turno abituale" : ""}</p>
+                          <p className="text-xs text-muted-foreground">{session.course?.name}{habitual ? " · posto fisso" : " · posto occasionale"}</p>
+                          <p className={`mt-1 text-[11px] ${closed ? "text-destructive" : "text-muted-foreground"}`}>{closed ? "Conferme chiuse" : `Rispondi entro ${format(deadline, "EEEE HH:mm", { locale: it })}`}</p>
                         </div>
                         <div className="text-right text-xs text-muted-foreground">
                           <Users className="mr-1 inline h-3.5 w-3.5" />
                           {remaining === null ? "Disponibile" : `${remaining} posti`}
                         </div>
                       </div>
-                      <Button
-                        className="mt-3 w-full"
-                        variant={booking ? "outline" : habitual ? "default" : "secondary"}
-                        disabled={savingId === session.id || unavailable}
-                        onClick={() => void action(session, booking ? "cancel" : "confirm")}
-                      >
-                        {savingId === session.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {booking ? "Annulla presenza" : unavailable ? (remaining === 0 ? "Turno completo" : "Hai già scelto il turno") : habitual ? "Conferma presenza" : "Prenota questo turno"}
-                      </Button>
+                      {habitual && !booking && !closed ? (
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <Button disabled={savingId === session.id || unavailable} onClick={() => void action(session, "confirm")}><CheckCircle2 className="mr-1 h-4 w-4" />Partecipo</Button>
+                          <Button variant="outline" disabled={savingId === session.id} onClick={() => void action(session, "cancel")}><UserRoundX className="mr-1 h-4 w-4" />Non partecipo</Button>
+                        </div>
+                      ) : (
+                        <Button
+                          className="mt-3 w-full"
+                          variant={activeBooking ? "outline" : declined ? "secondary" : habitual ? "default" : "secondary"}
+                          disabled={savingId === session.id || (unavailable && !declined) || (closed && !activeBooking)}
+                          onClick={() => void action(session, activeBooking ? "cancel" : "confirm")}
+                        >
+                          {savingId === session.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          {activeBooking ? "Annulla presenza" : declined ? "Cambio idea: partecipo" : closed ? "Conferme chiuse" : unavailable ? (remaining === 0 ? "Turno completo" : "Hai già scelto il turno") : habitual ? "Conferma presenza" : "Prenota posto occasionale"}
+                        </Button>
+                      )}
                     </div>
                   );
                 })}

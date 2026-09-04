@@ -300,6 +300,7 @@ export type Database = {
           end_time: string
           id: string
           is_cancelled: boolean
+          confirmation_deadline_hours: number
           fixed_places: number
           floating_places: number | null
           max_participants: number | null
@@ -312,6 +313,7 @@ export type Database = {
           end_time: string
           id?: string
           is_cancelled?: boolean
+          confirmation_deadline_hours?: number
           fixed_places?: number
           floating_places?: number | null
           max_participants?: number | null
@@ -324,6 +326,7 @@ export type Database = {
           end_time?: string
           id?: string
           is_cancelled?: boolean
+          confirmation_deadline_hours?: number
           fixed_places?: number
           floating_places?: number | null
           max_participants?: number | null

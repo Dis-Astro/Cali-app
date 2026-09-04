@@ -58,6 +58,7 @@ const CourseManagement = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [coaches, setCoaches] = useState<Profile[]>([]);
   const [allClients, setAllClients] = useState<Profile[]>([]);
+  const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -93,15 +94,22 @@ const CourseManagement = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [coursesRes, coachesRes, clientsRes] = await Promise.all([
+    const [coursesRes, coachesRes, clientsRes, participantsRes] = await Promise.all([
       supabase.from("courses").select("*").order("name"),
       supabase.from("profiles").select("*").in("role", ["admin", "coach"]),
-      supabase.from("profiles").select("*").in("role", ["cliente_corso", "cliente_palestra", "cliente_coaching"])
+      supabase.from("profiles").select("*").in("role", ["cliente_corso", "cliente_palestra", "cliente_coaching"]),
+      supabase.from("course_participants").select("course_id"),
     ]);
 
     if (coursesRes.data) setCourses(coursesRes.data);
     if (coachesRes.data) setCoaches(coachesRes.data);
     if (clientsRes.data) setAllClients(clientsRes.data);
+    if (participantsRes.data) {
+      setParticipantCounts(participantsRes.data.reduce<Record<string, number>>((counts, participant) => {
+        counts[participant.course_id] = (counts[participant.course_id] ?? 0) + 1;
+        return counts;
+      }, {}));
+    }
     setLoading(false);
   };
 
@@ -399,7 +407,12 @@ const CourseManagement = () => {
                     </TableCell>
                     <TableCell>{getCoachName(course.coach_id)}</TableCell>
                     <TableCell>{course.duration_minutes} min</TableCell>
-                    <TableCell>{course.max_participants || "∞"}</TableCell>
+                    <TableCell>
+                      <button type="button" className="text-left" onClick={() => openParticipantsDialog(course)}>
+                        <span className="block font-semibold text-primary">{participantCounts[course.id] ?? 0} iscritti</span>
+                        <span className="text-xs text-muted-foreground">capienza {course.max_participants || "∞"}</span>
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={course.is_active ? "default" : "secondary"}>
                         {course.is_active ? "Attivo" : "Disattivo"}
@@ -433,9 +446,7 @@ const CourseManagement = () => {
             <DialogTitle className="font-display tracking-wider">
               Iscritti — {selectedCourse?.name}
             </DialogTitle>
-            <DialogDescription>
-              Gestisci i partecipanti di questo corso
-            </DialogDescription>
+            <DialogDescription>Iscrizione al corso e posto abituale. Le presenze si confermano poi per ogni lezione.</DialogDescription>
           </DialogHeader>
 
           <div className="rounded-xl border border-border p-3 space-y-3">
@@ -459,7 +470,7 @@ const CourseManagement = () => {
             <div className="grid grid-cols-3 gap-2">
               <Select value={participantType} onValueChange={(value: "floating" | "fixed") => setParticipantType(value)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="floating">Vagante</SelectItem><SelectItem value="fixed">Fisso</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="floating">Occasionale</SelectItem><SelectItem value="fixed">Posto fisso</SelectItem></SelectContent>
               </Select>
               <Select value={fixedDay} onValueChange={setFixedDay}>
                 <SelectTrigger disabled={participantType === "floating"}><SelectValue /></SelectTrigger>
@@ -467,7 +478,7 @@ const CourseManagement = () => {
               </Select>
               <Input type="time" value={fixedTime} onChange={(event) => setFixedTime(event.target.value)} disabled={participantType === "floating"} />
             </div>
-            <p className="text-xs text-muted-foreground">Per i posti fissi scegli giorno e ora; ogni atleta dovrà comunque confermare ogni settimana.</p>
+            <p className="text-xs text-muted-foreground">Fisso = stesso giorno e orario ogni settimana. Occasionale = sceglie tra i posti liberi. Il fisso deve comunque rispondere alla notifica settimanale.</p>
           </div>
 
           {/* Participants list */}
@@ -482,7 +493,11 @@ const CourseManagement = () => {
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">{participants.length} iscritti</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg bg-muted/50 p-2"><p className="font-bold">{participants.length}</p><p className="text-[11px] text-muted-foreground">iscritti</p></div>
+                <div className="rounded-lg bg-primary/10 p-2"><p className="font-bold text-primary">{new Set(fixedAssignments.map((item) => item.user_id)).size}</p><p className="text-[11px] text-muted-foreground">con posto fisso</p></div>
+                <div className="rounded-lg bg-muted/50 p-2"><p className="font-bold">{participants.length - new Set(fixedAssignments.map((item) => item.user_id)).size}</p><p className="text-[11px] text-muted-foreground">occasionali</p></div>
+              </div>
               {participants.map(p => (
                 <div key={p.id} className="p-3 rounded-lg border border-border bg-card">
                   <div className="flex items-start justify-between gap-2">
@@ -504,7 +519,7 @@ const CourseManagement = () => {
                       </Badge>
                     ))}
                     <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void addFixedAssignment(p.user_id)}>
-                      <CalendarClock className="h-3.5 w-3.5" />Assegna {fixedDayLabels[Number(fixedDay)]} {fixedTime}
+                      <CalendarClock className="h-3.5 w-3.5" />Rendi fisso: {fixedDayLabels[Number(fixedDay)]} {fixedTime}
                     </Button>
                   </div>
                 </div>

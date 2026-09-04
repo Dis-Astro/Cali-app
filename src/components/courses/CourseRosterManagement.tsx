@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, format, getISODay } from "date-fns";
 import { it } from "date-fns/locale";
-import { CalendarClock, Loader2, RefreshCw, Users } from "lucide-react";
+import { CalendarClock, Clock3, Loader2, RefreshCw, UserCheck, UserRoundX, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,11 @@ interface Booking {
   status: string;
 }
 
+interface Membership {
+  course_id: string;
+  user_id: string;
+}
+
 interface Assignment {
   course_id: string;
   user_id: string;
@@ -49,6 +54,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
   const [sessions, setSessions] = useState<Session[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
   const [names, setNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -91,13 +97,15 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
     const normalized = sessionData as Session[];
     const sessionIds = normalized.map((session) => session.id);
     const activeCourseIds = [...new Set(normalized.map((session) => session.course_id))];
-    const [bookingResult, assignmentResult] = await Promise.all([
+    const [bookingResult, assignmentResult, membershipResult] = await Promise.all([
       sessionIds.length ? supabase.from("course_bookings").select("id, course_session_id, user_id, booking_type, status").in("course_session_id", sessionIds) : Promise.resolve({ data: [] }),
       activeCourseIds.length ? supabase.from("course_fixed_assignments").select("course_id, user_id, day_of_week, start_time").in("course_id", activeCourseIds).eq("is_active", true) : Promise.resolve({ data: [] }),
+      activeCourseIds.length ? supabase.from("course_participants").select("course_id, user_id").in("course_id", activeCourseIds) : Promise.resolve({ data: [] }),
     ]);
     const nextBookings = (bookingResult.data ?? []) as Booking[];
     const nextAssignments = (assignmentResult.data ?? []) as Assignment[];
-    const userIds = [...new Set([...nextBookings.map((booking) => booking.user_id), ...nextAssignments.map((assignment) => assignment.user_id)])];
+    const nextMemberships = (membershipResult.data ?? []) as Membership[];
+    const userIds = [...new Set([...nextBookings.map((booking) => booking.user_id), ...nextAssignments.map((assignment) => assignment.user_id), ...nextMemberships.map((membership) => membership.user_id)])];
     const profileResult = userIds.length
       ? await supabase.from("profiles").select("user_id, first_name, last_name").in("user_id", userIds)
       : { data: [] };
@@ -105,6 +113,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
     setSessions(normalized);
     setBookings(nextBookings);
     setAssignments(nextAssignments);
+    setMemberships(nextMemberships);
     setNames(new Map((profileResult.data ?? []).map((profile) => [profile.user_id, `${profile.first_name} ${profile.last_name}`])));
     setLoading(false);
   }, [coachId, range.end, range.start, showHistory]);
@@ -129,11 +138,38 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
   const updateStatus = async (session: Session, userId: string, booking: Booking | undefined, status: string) => {
     const key = `${session.id}:${userId}`;
     setSaving(key);
+    const fixedMember = assignmentsForSession(session).some((assignment) => assignment.user_id === userId);
     const result = booking
       ? await supabase.from("course_bookings").update({ status }).eq("id", booking.id)
-      : await supabase.from("course_bookings").insert({ course_session_id: session.id, user_id: userId, booking_type: "fixed", status });
+      : await supabase.from("course_bookings").insert({ course_session_id: session.id, user_id: userId, booking_type: fixedMember ? "fixed" : "floating", status });
     if (result.error) toast.error("Impossibile aggiornare la presenza");
     else await load();
+    setSaving(null);
+  };
+
+  const setFixed = async (session: Session, userId: string, fixed: boolean) => {
+    const start = new Date(session.start_time);
+    const key = `${session.id}:${userId}:fixed`;
+    setSaving(key);
+    const query = supabase.from("course_fixed_assignments");
+    const result = fixed
+      ? await query.insert({
+          course_id: session.course_id,
+          user_id: userId,
+          day_of_week: getISODay(start),
+          start_time: format(start, "HH:mm:ss"),
+        })
+      : await query
+          .delete()
+          .eq("course_id", session.course_id)
+          .eq("user_id", userId)
+          .eq("day_of_week", getISODay(start))
+          .eq("start_time", format(start, "HH:mm:ss"));
+    if (result.error) toast.error(result.error.message);
+    else {
+      toast.success(fixed ? "Posto fisso assegnato" : "Passato a occasionale");
+      await load();
+    }
     setSaving(null);
   };
 
@@ -158,22 +194,35 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
         {sessions.map((session) => {
           const sessionBookings = bookings.filter((booking) => booking.course_session_id === session.id);
           const fixed = assignmentsForSession(session);
+          const courseMembers = memberships.filter((membership) => membership.course_id === session.course_id);
           const attendeeIds = [...new Set([...fixed.map((assignment) => assignment.user_id), ...sessionBookings.map((booking) => booking.user_id)])];
           const active = sessionBookings.filter((booking) => activeStatuses.has(booking.status));
           const floatingActive = active.filter((booking) => booking.booking_type !== "fixed").length;
+          const declined = sessionBookings.filter((booking) => ["cancelled", "absent"].includes(booking.status)).length;
+          const awaiting = fixed.filter((assignment) => !sessionBookings.some((booking) => booking.user_id === assignment.user_id)).length;
           const capacity = session.max_participants ?? session.course?.max_participants;
+          const placesLeft = capacity === null || capacity === undefined ? null : Math.max(0, capacity - active.length);
           return (
-            <section key={session.id} className="rounded-2xl border border-border p-4">
+            <section key={session.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+              <div className="h-1.5 w-full bg-muted">
+                <div className="h-full rounded-r-full bg-primary transition-all" style={{ width: capacity ? `${Math.min(100, (active.length / capacity) * 100)}%` : "0%" }} />
+              </div>
+              <div className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold capitalize">{format(new Date(session.start_time), "EEEE d MMMM · HH:mm", { locale: it })}</p>
                   <p className="text-sm text-muted-foreground">{session.course?.name}</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <Badge><Users className="mr-1 h-3 w-3" />Confermati {active.length}/{capacity ?? "∞"}</Badge>
-                  <Badge variant="secondary">Fissi {fixed.length}/{session.fixed_places}</Badge>
-                  <Badge variant="secondary">Vaganti {floatingActive}/{session.floating_places ?? 0}</Badge>
+                  <Badge><UserCheck className="mr-1 h-3 w-3" />Presenti previsti {active.length}/{capacity ?? "∞"}</Badge>
+                  <Badge variant={awaiting ? "outline" : "secondary"}><Clock3 className="mr-1 h-3 w-3" />Da confermare {awaiting}</Badge>
+                  <Badge variant={declined ? "destructive" : "secondary"}><UserRoundX className="mr-1 h-3 w-3" />Assenti {declined}</Badge>
                 </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold">{fixed.length}/{session.fixed_places}</p><p className="text-[11px] text-muted-foreground">posti fissi</p></div>
+                <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold">{floatingActive}/{session.floating_places ?? 0}</p><p className="text-[11px] text-muted-foreground">occasionali</p></div>
+                <div className="rounded-xl bg-primary/10 p-2"><p className="text-lg font-bold text-primary">{placesLeft ?? "∞"}</p><p className="text-[11px] text-muted-foreground">posti liberi</p></div>
               </div>
               <div className="mt-3 space-y-2">
                 {!attendeeIds.length && <p className="text-xs text-muted-foreground">Nessuna assegnazione o prenotazione.</p>}
@@ -183,18 +232,42 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
                   const value = booking?.status ?? "pending";
                   const key = `${session.id}:${userId}`;
                   return (
-                    <div key={userId} className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2">
+                    <div key={userId} className="flex flex-col gap-2 rounded-xl bg-muted/30 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{names.get(userId) ?? "Membro"}</p>
-                        <p className="text-xs text-muted-foreground">{fixedMember ? "Posto fisso" : booking?.booking_type === "switch" ? "Cambio turno" : "Posto vagante"}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <Badge variant={fixedMember ? "default" : "outline"} className="text-[10px]">{fixedMember ? "Fisso" : booking?.booking_type === "switch" ? "Cambio turno" : "Occasionale"}</Badge>
+                          <Badge variant="secondary" className="text-[10px]">{booking ? statusLabels[value] : "Da confermare"}</Badge>
+                        </div>
                       </div>
-                      <Select value={value} onValueChange={(status) => void updateStatus(session, userId, booking, status)} disabled={saving === key}>
-                        <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
-                        <SelectContent>{Object.entries(statusLabels).map(([status, label]) => <SelectItem key={status} value={status}>{label}</SelectItem>)}</SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="h-9" disabled={saving === `${session.id}:${userId}:fixed`} onClick={() => void setFixed(session, userId, !fixedMember)}>
+                          {fixedMember ? "Rendi occasionale" : "Rendi fisso"}
+                        </Button>
+                        <Select value={value} onValueChange={(status) => void updateStatus(session, userId, booking, status)} disabled={saving === key}>
+                          <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+                          <SelectContent>{Object.entries(statusLabels).map(([status, label]) => <SelectItem key={status} value={status}>{label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   );
                 })}
+              </div>
+              <details className="mt-3 rounded-xl border border-border px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium">Gestisci posti fissi e occasionali ({courseMembers.length} iscritti)</summary>
+                <div className="mt-3 space-y-2">
+                  {courseMembers.map((member) => {
+                    const fixedMember = fixed.some((assignment) => assignment.user_id === member.user_id);
+                    const fixedKey = `${session.id}:${member.user_id}:fixed`;
+                    return (
+                      <div key={member.user_id} className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2">
+                        <div className="min-w-0"><p className="truncate text-sm font-medium">{names.get(member.user_id) ?? "Membro"}</p><p className="text-xs text-muted-foreground">{fixedMember ? "Posto riservato ogni settimana" : "Prenota solo quando partecipa"}</p></div>
+                        <Button variant={fixedMember ? "secondary" : "outline"} size="sm" disabled={saving === fixedKey} onClick={() => void setFixed(session, member.user_id, !fixedMember)}>{fixedMember ? "Rendi occasionale" : "Imposta fisso"}</Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
               </div>
             </section>
           );
