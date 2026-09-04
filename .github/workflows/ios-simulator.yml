@@ -98,7 +98,8 @@ jobs:
           xcrun simctl boot "$DEVICE_UDID" || true
           SIMULATOR_READY=0
           for attempt in $(seq 1 90); do
-            if xcrun simctl spawn "$DEVICE_UDID" launchctl print system >/dev/null 2>&1; then
+            SIMULATOR_STATE=$(xcrun simctl list devices -j | python3 -c "import json,sys; target='$DEVICE_UDID'; d=json.load(sys.stdin)['devices']; print(next((x['state'] for runtime in d.values() for x in runtime if x['udid'] == target), 'Missing'))")
+            if [ "$SIMULATOR_STATE" = "Booted" ]; then
               SIMULATOR_READY=1
               break
             fi
