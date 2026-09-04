@@ -96,17 +96,25 @@ jobs:
           APP_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print:CFBundleIdentifier' "$APP_PATH/Info.plist")
           DEVICE_UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for runtime in d.values() for x in runtime if x['name'].startswith('iPhone')))" )
           xcrun simctl boot "$DEVICE_UDID" || true
-          python3 - "$DEVICE_UDID" <<'PY'
-          import subprocess
-          import sys
-
-          subprocess.run(
-              ["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"],
-              check=True,
-              timeout=180,
-          )
-          PY
-          xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
+          SIMULATOR_READY=0
+          for attempt in $(seq 1 90); do
+            if xcrun simctl spawn "$DEVICE_UDID" launchctl print system >/dev/null 2>&1; then
+              SIMULATOR_READY=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$SIMULATOR_READY" -ne 1 ]; then
+            echo "Il simulatore non si è avviato entro 180 secondi."
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if xcrun simctl install "$DEVICE_UDID" "$APP_PATH"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 5
+          done
           xcrun simctl launch "$DEVICE_UDID" "$APP_BUNDLE_ID"
           sleep 5
           xcrun simctl launch --terminate-running-process "$DEVICE_UDID" "$APP_BUNDLE_ID"
