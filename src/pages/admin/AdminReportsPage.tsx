@@ -116,15 +116,17 @@ async function fetchAllFeedbackCompletions(signal: AbortSignal) {
   let from = 0;
 
   while (true) {
-    const { data, error } = await withReadRetry(() => supabase
-      .from("workout_completions")
-      .select("id, client_id, workout_plan_exercise_id, completed_at, client_notes, difficulty_rating, set_number")
-      .or("client_notes.not.is.null,difficulty_rating.gt.0")
-      .order("completed_at", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1)
-      .abortSignal(signal), signal);
-
-    if (error) throw error;
+    const { data } = await withReadRetry(async () => {
+      const result = await supabase
+        .from("workout_completions")
+        .select("id, client_id, workout_plan_exercise_id, completed_at, client_notes, difficulty_rating, set_number")
+        .or("client_notes.not.is.null,difficulty_rating.gt.0")
+        .order("completed_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1)
+        .abortSignal(signal);
+      if (result.error) throw result.error;
+      return result;
+    }, signal);
     const batch = data || [];
     rows.push(...batch.filter(hasFeedback));
     if (batch.length < PAGE_SIZE) break;
@@ -140,13 +142,15 @@ async function fetchInChunks(table: "workout_plan_exercises" | "workout_plans" |
 
   for (let i = 0; i < uniqueIds.length; i += IN_CHUNK_SIZE) {
     const chunk = uniqueIds.slice(i, i + IN_CHUNK_SIZE);
-    const result = await withReadRetry(() => (supabase.from(table) as any)
-      .select(select)
-      .in(column, chunk)
-      .abortSignal(signal), signal);
-    const { data, error } = result as { data: any[] | null; error: Error | null };
-
-    if (error) throw error;
+    const result = await withReadRetry(async () => {
+      const response = await (supabase.from(table) as any)
+        .select(select)
+        .in(column, chunk)
+        .abortSignal(signal);
+      if (response.error) throw response.error;
+      return response;
+    }, signal);
+    const { data } = result as { data: any[] | null; error: Error | null };
     rows.push(...(data || []));
   }
 
