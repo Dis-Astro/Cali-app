@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { endOfWeek, format, getISODay, startOfWeek } from "date-fns";
+import { endOfWeek, format, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
 import { Bell, CalendarCheck2, CheckCircle2, Loader2, RefreshCw, UserRoundX, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { courseRemindersAvailable, courseRemindersEnabled, enableCourseReminders, syncCourseReminders } from "@/features/course-booking/courseReminders";
+import { confirmationDeadline, gymSlot, matchesFixedSlot } from "@/features/course-booking/courseSchedule";
 
 interface CourseSession {
   id: string;
@@ -42,7 +43,6 @@ interface Availability {
 }
 
 const groupForDay = (day: number) => day <= 2 ? 1 : day <= 4 ? 2 : day + 10;
-const localTime = (date: Date) => format(date, "HH:mm:ss");
 const activeStatuses = new Set(["pending", "confirmed", "present"]);
 
 export default function ClientCourseBooking({ userId }: { userId: string }) {
@@ -53,7 +53,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
   const [enrolled, setEnrolled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [remindersOn, setRemindersOn] = useState(courseRemindersEnabled());
+  const [remindersOn, setRemindersOn] = useState(courseRemindersEnabled(userId));
 
   const week = useMemo(() => ({
     start: startOfWeek(new Date(), { weekStartsOn: 1 }),
@@ -101,8 +101,11 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    if (sessions.length) void syncCourseReminders(sessions, fixedAssignments, bookings);
-  }, [bookings, fixedAssignments, sessions]);
+    setRemindersOn(courseRemindersEnabled(userId));
+    void syncCourseReminders(sessions, fixedAssignments, bookings, userId).catch(() => {
+      toast.error("Impossibile aggiornare i promemoria sul dispositivo");
+    });
+  }, [bookings, fixedAssignments, sessions, userId]);
 
   useEffect(() => {
     const channel = supabase
@@ -115,12 +118,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
 
   const bookingFor = (sessionId: string) => bookings.find((booking) => booking.course_session_id === sessionId);
   const isFixed = (session: CourseSession) => {
-    const start = new Date(session.start_time);
-    return fixedAssignments.some((assignment) =>
-      assignment.course_id === session.course_id
-      && assignment.day_of_week === getISODay(start)
-      && assignment.start_time.slice(0, 8) === localTime(start),
-    );
+    return fixedAssignments.some((assignment) => matchesFixedSlot(assignment, session));
   };
   const placesLeft = (session: CourseSession) => {
     const counts = availability.find((item) => item.session_id === session.id);
@@ -138,13 +136,13 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
   };
 
   const activateReminders = async () => {
-    const enabled = await enableCourseReminders();
+    const enabled = await enableCourseReminders(userId);
     setRemindersOn(enabled);
     if (!enabled) {
       toast.error("Notifiche non abilitate", { description: "Puoi abilitarle dalle impostazioni dell’iPhone." });
       return;
     }
-    await syncCourseReminders(sessions, fixedAssignments, bookings);
+    await syncCourseReminders(sessions, fixedAssignments, bookings, userId);
     toast.success("Promemoria attivati");
   };
 
@@ -163,7 +161,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 font-display tracking-wider"><CalendarCheck2 className="h-5 w-5 text-primary" />QUESTA SETTIMANA</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">Conferma un turno tra lun–mar e uno tra mer–gio, entro 6 ore dall’inizio.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Scegli un turno per gruppo e rispondi entro la scadenza indicata sulla lezione.</p>
           </div>
           <div className="flex gap-1">
             {courseRemindersAvailable() && <Button variant={remindersOn ? "secondary" : "outline"} size="sm" className="gap-1" onClick={() => void activateReminders()}><Bell className="h-4 w-4" />{remindersOn ? "Promemoria attivi" : "Avvisami"}</Button>}
@@ -172,8 +170,8 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {[1, 2].map((group) => {
-          const groupSessions = sessions.filter((session) => groupForDay(getISODay(new Date(session.start_time))) === group);
+        {[1, 2, 15, 16, 17].map((group) => {
+          const groupSessions = sessions.filter((session) => groupForDay(gymSlot(session.start_time).day) === group);
           if (!groupSessions.length) return null;
           const selected = groupSessions.find((session) => {
             const booking = bookingFor(session.id);
@@ -182,7 +180,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
           return (
             <section key={group}>
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-semibold">Giorno {group}</h3>
+                <h3 className="font-semibold">{({ 1: "Lunedì / Martedì", 2: "Mercoledì / Giovedì", 15: "Venerdì", 16: "Sabato", 17: "Domenica" } as Record<number, string>)[group]}</h3>
                 {selected && <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Confermato</Badge>}
               </div>
               <div className="space-y-2">
@@ -193,8 +191,7 @@ export default function ClientCourseBooking({ userId }: { userId: string }) {
                   const declined = booking?.status === "cancelled" || booking?.status === "absent";
                   const habitual = isFixed(session);
                   const remaining = placesLeft(session);
-                  const deadlineHours = session.confirmation_deadline_hours ?? 6;
-                  const deadline = new Date(start.getTime() - deadlineHours * 60 * 60 * 1000);
+                  const deadline = confirmationDeadline(session);
                   const closed = Date.now() >= deadline.getTime();
                   const unavailable = !activeBooking && !declined && (Boolean(selected) || remaining === 0 || closed);
                   return (

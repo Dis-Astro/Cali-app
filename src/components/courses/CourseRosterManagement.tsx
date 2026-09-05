@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDays, format, getISODay } from "date-fns";
+import { addDays, format } from "date-fns";
 import { it } from "date-fns/locale";
 import { CalendarClock, Clock3, Loader2, RefreshCw, UserCheck, UserRoundX, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { gymSlot, matchesFixedSlot } from "@/features/course-booking/courseSchedule";
+import { summarizeRoster } from "@/features/course-booking/courseRoster";
 
 interface Session {
   id: string;
@@ -48,8 +50,6 @@ const statusLabels: Record<string, string> = {
   cancelled: "Annullato",
 };
 
-const activeStatuses = new Set(["pending", "confirmed", "present"]);
-
 export default function CourseRosterManagement({ coachId }: { coachId?: string }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -59,6 +59,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const range = useMemo(() => {
     const now = new Date();
@@ -67,6 +68,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     let courseIds: string[] | null = null;
     if (coachId) {
       const { data } = await supabase.from("courses").select("id").eq("coach_id", coachId).eq("is_active", true);
@@ -89,6 +91,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
     if (courseIds) sessionQuery = sessionQuery.in("course_id", courseIds);
     const { data: sessionData, error } = await sessionQuery;
     if (error || !sessionData) {
+      setLoadError(true);
       if (error) toast.error("Impossibile caricare i turni");
       setLoading(false);
       return;
@@ -102,6 +105,11 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
       activeCourseIds.length ? supabase.from("course_fixed_assignments").select("course_id, user_id, day_of_week, start_time").in("course_id", activeCourseIds).eq("is_active", true) : Promise.resolve({ data: [] }),
       activeCourseIds.length ? supabase.from("course_participants").select("course_id, user_id").in("course_id", activeCourseIds) : Promise.resolve({ data: [] }),
     ]);
+    if ([bookingResult, assignmentResult, membershipResult].some((result) => "error" in result && result.error)) {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
     const nextBookings = (bookingResult.data ?? []) as Booking[];
     const nextAssignments = (assignmentResult.data ?? []) as Assignment[];
     const nextMemberships = (membershipResult.data ?? []) as Membership[];
@@ -130,9 +138,8 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
   }, [coachId, load]);
 
   const assignmentsForSession = (session: Session) => {
-    const start = new Date(session.start_time);
-    const time = format(start, "HH:mm:ss");
-    return assignments.filter((assignment) => assignment.course_id === session.course_id && assignment.day_of_week === getISODay(start) && assignment.start_time.slice(0, 8) === time);
+    if (new Date(session.start_time).getTime() < Date.now()) return [];
+    return assignments.filter((assignment) => matchesFixedSlot(assignment, session));
   };
 
   const updateStatus = async (session: Session, userId: string, booking: Booking | undefined, status: string) => {
@@ -148,7 +155,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
   };
 
   const setFixed = async (session: Session, userId: string, fixed: boolean) => {
-    const start = new Date(session.start_time);
+    const slot = gymSlot(session.start_time);
     const key = `${session.id}:${userId}:fixed`;
     setSaving(key);
     const query = supabase.from("course_fixed_assignments");
@@ -156,15 +163,15 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
       ? await query.insert({
           course_id: session.course_id,
           user_id: userId,
-          day_of_week: getISODay(start),
-          start_time: format(start, "HH:mm:ss"),
+          day_of_week: slot.day,
+          start_time: slot.time,
         })
       : await query
           .delete()
           .eq("course_id", session.course_id)
           .eq("user_id", userId)
-          .eq("day_of_week", getISODay(start))
-          .eq("start_time", format(start, "HH:mm:ss"));
+          .eq("day_of_week", slot.day)
+          .eq("start_time", slot.time);
     if (result.error) toast.error(result.error.message);
     else {
       toast.success(fixed ? "Posto fisso assegnato" : "Passato a occasionale");
@@ -190,22 +197,23 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {loadError && <p role="alert" className="text-sm text-destructive">Presenze non disponibili: aggiorna prima di modificarle. Non vengono mostrati conteggi incompleti.</p>}
+        {!loadError && <>
         {!sessions.length && <p className="py-8 text-center text-sm text-muted-foreground">Nessun turno programmato.</p>}
         {sessions.map((session) => {
           const sessionBookings = bookings.filter((booking) => booking.course_session_id === session.id);
           const fixed = assignmentsForSession(session);
           const courseMembers = memberships.filter((membership) => membership.course_id === session.course_id);
           const attendeeIds = [...new Set([...fixed.map((assignment) => assignment.user_id), ...sessionBookings.map((booking) => booking.user_id)])];
-          const active = sessionBookings.filter((booking) => activeStatuses.has(booking.status));
-          const floatingActive = active.filter((booking) => booking.booking_type !== "fixed").length;
-          const declined = sessionBookings.filter((booking) => ["cancelled", "absent"].includes(booking.status)).length;
-          const awaiting = fixed.filter((assignment) => !sessionBookings.some((booking) => booking.user_id === assignment.user_id)).length;
           const capacity = session.max_participants ?? session.course?.max_participants;
-          const placesLeft = capacity === null || capacity === undefined ? null : Math.max(0, capacity - active.length);
+          const counts = summarizeRoster(sessionBookings, fixed.map((assignment) => assignment.user_id), capacity);
+          const { awaiting, declined, placesLeft, floating: floatingActive } = counts;
+          const historical = new Date(session.start_time).getTime() < Date.now();
+          const fixedCount = historical ? sessionBookings.filter((booking) => booking.booking_type === "fixed").length : fixed.length;
           return (
             <section key={session.id} className="overflow-hidden rounded-2xl border border-border bg-card">
               <div className="h-1.5 w-full bg-muted">
-                <div className="h-full rounded-r-full bg-primary transition-all" style={{ width: capacity ? `${Math.min(100, (active.length / capacity) * 100)}%` : "0%" }} />
+                <div className="h-full rounded-r-full bg-primary transition-all" style={{ width: capacity ? `${Math.min(100, (counts.reserved / capacity) * 100)}%` : "0%" }} />
               </div>
               <div className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -214,13 +222,13 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
                   <p className="text-sm text-muted-foreground">{session.course?.name}</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <Badge><UserCheck className="mr-1 h-3 w-3" />Presenti previsti {active.length}/{capacity ?? "∞"}</Badge>
+                  <Badge><UserCheck className="mr-1 h-3 w-3" />Confermati / presenti {counts.confirmed}/{capacity ?? "∞"}</Badge>
                   <Badge variant={awaiting ? "outline" : "secondary"}><Clock3 className="mr-1 h-3 w-3" />Da confermare {awaiting}</Badge>
                   <Badge variant={declined ? "destructive" : "secondary"}><UserRoundX className="mr-1 h-3 w-3" />Assenti {declined}</Badge>
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold">{fixed.length}/{session.fixed_places}</p><p className="text-[11px] text-muted-foreground">posti fissi</p></div>
+                <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold">{fixedCount}/{session.fixed_places}</p><p className="text-[11px] text-muted-foreground">{historical ? "fissi registrati" : "posti fissi"}</p></div>
                 <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold">{floatingActive}/{session.floating_places ?? 0}</p><p className="text-[11px] text-muted-foreground">occasionali</p></div>
                 <div className="rounded-xl bg-primary/10 p-2"><p className="text-lg font-bold text-primary">{placesLeft ?? "∞"}</p><p className="text-[11px] text-muted-foreground">posti liberi</p></div>
               </div>
@@ -228,7 +236,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
                 {!attendeeIds.length && <p className="text-xs text-muted-foreground">Nessuna assegnazione o prenotazione.</p>}
                 {attendeeIds.map((userId) => {
                   const booking = sessionBookings.find((item) => item.user_id === userId);
-                  const fixedMember = fixed.some((assignment) => assignment.user_id === userId);
+                  const fixedMember = historical ? booking?.booking_type === "fixed" : fixed.some((assignment) => assignment.user_id === userId);
                   const value = booking?.status ?? "pending";
                   const key = `${session.id}:${userId}`;
                   return (
@@ -241,7 +249,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="h-9" disabled={saving === `${session.id}:${userId}:fixed`} onClick={() => void setFixed(session, userId, !fixedMember)}>
+                        <Button variant="outline" size="sm" className="h-9" disabled={historical || saving === `${session.id}:${userId}:fixed`} onClick={() => void setFixed(session, userId, !fixedMember)}>
                           {fixedMember ? "Rendi occasionale" : "Rendi fisso"}
                         </Button>
                         <Select value={value} onValueChange={(status) => void updateStatus(session, userId, booking, status)} disabled={saving === key}>
@@ -253,7 +261,7 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
                   );
                 })}
               </div>
-              <details className="mt-3 rounded-xl border border-border px-3 py-2">
+              {historical ? <p className="mt-3 text-xs text-muted-foreground">Lo storico mostra solo le risposte registrate. Le assegnazioni fisse attuali non ricostruiscono le presenze passate.</p> : <details className="mt-3 rounded-xl border border-border px-3 py-2">
                 <summary className="cursor-pointer text-sm font-medium">Gestisci posti fissi e occasionali ({courseMembers.length} iscritti)</summary>
                 <div className="mt-3 space-y-2">
                   {courseMembers.map((member) => {
@@ -267,11 +275,12 @@ export default function CourseRosterManagement({ coachId }: { coachId?: string }
                     );
                   })}
                 </div>
-              </details>
+              </details>}
               </div>
             </section>
           );
         })}
+        </>}
       </CardContent>
     </Card>
   );

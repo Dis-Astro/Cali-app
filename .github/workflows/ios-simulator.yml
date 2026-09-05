@@ -49,7 +49,7 @@ jobs:
           cache: npm
 
       - name: Install web dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: Test offline synchronization logic
         run: npm test -- src/lib/offlineSync.test.ts

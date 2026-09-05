@@ -1,11 +1,34 @@
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { confirmationDeadline, GYM_TIME_ZONE, matchesFixedSlot, reminderTimes } from "./courseSchedule";
 
-type Session = { id: string; course_id: string; start_time: string; course: { name: string } | null };
+type Session = { id: string; course_id: string; start_time: string; confirmation_deadline_hours?: number; course: { name: string } | null };
 type Assignment = { course_id: string; day_of_week: number; start_time: string };
 type Booking = { course_session_id: string; status: string };
 
 const REMINDER_KEY = "course-confirmation-reminders";
+let reminderVersion = 0;
+let reminderWork: Promise<unknown> = Promise.resolve();
+
+function serializeReminders(work: (version: number) => Promise<void>) {
+  const version = ++reminderVersion;
+  const next = reminderWork.then(() => work(version));
+  reminderWork = next.catch(() => undefined);
+  return next;
+}
+
+async function cancelPendingCourseReminders() {
+  if (!courseRemindersAvailable()) return;
+  const pending = await LocalNotifications.getPending();
+  const courseNotifications = pending.notifications.filter((item) => item.extra?.kind === "course-confirmation");
+  if (courseNotifications.length) {
+    await LocalNotifications.cancel({ notifications: courseNotifications.map(({ id }) => ({ id })) });
+  }
+}
+
+export function clearCourseReminders() {
+  return serializeReminders(async () => { await cancelPendingCourseReminders(); });
+}
 
 const idFor = (sessionId: string, suffix: number) => {
   let hash = 0;
@@ -13,58 +36,44 @@ const idFor = (sessionId: string, suffix: number) => {
   return Math.abs(hash % 1_000_000_000) * 2 + suffix;
 };
 
-const isAssignmentForSession = (assignment: Assignment, session: Session) => {
-  const start = new Date(session.start_time);
-  const isoDay = start.getDay() === 0 ? 7 : start.getDay();
-  const localTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
-  return assignment.course_id === session.course_id
-    && assignment.day_of_week === isoDay
-    && assignment.start_time.slice(0, 5) === localTime;
-};
-
 export const courseRemindersAvailable = () => Capacitor.isNativePlatform();
 
-export async function enableCourseReminders() {
+export async function enableCourseReminders(userId: string) {
   if (!courseRemindersAvailable()) return false;
   const current = await LocalNotifications.checkPermissions();
   const permission = current.display === "granted" ? current : await LocalNotifications.requestPermissions();
   if (permission.display !== "granted") return false;
-  localStorage.setItem(REMINDER_KEY, "enabled");
+  localStorage.setItem(`${REMINDER_KEY}:${userId}`, "enabled");
   return true;
 }
 
-export const courseRemindersEnabled = () => localStorage.getItem(REMINDER_KEY) === "enabled";
+export const courseRemindersEnabled = (userId: string) => localStorage.getItem(`${REMINDER_KEY}:${userId}`) === "enabled";
 
-export async function syncCourseReminders(sessions: Session[], assignments: Assignment[], bookings: Booking[]) {
-  if (!courseRemindersAvailable() || !courseRemindersEnabled()) return;
+export function syncCourseReminders(sessions: Session[], assignments: Assignment[], bookings: Booking[], userId: string) {
+  return serializeReminders(async (version) => {
+  if (!courseRemindersAvailable()) return;
+  await cancelPendingCourseReminders();
+  if (!courseRemindersEnabled(userId)) return;
   const permission = await LocalNotifications.checkPermissions();
   if (permission.display !== "granted") return;
 
-  const pending = await LocalNotifications.getPending();
-  const courseNotifications = pending.notifications.filter((item) => item.extra?.kind === "course-confirmation");
-  if (courseNotifications.length) {
-    await LocalNotifications.cancel({ notifications: courseNotifications.map(({ id }) => ({ id })) });
-  }
-
   const now = Date.now();
   const notifications = sessions.flatMap((session) => {
-    const fixed = assignments.some((assignment) => isAssignmentForSession(assignment, session));
+    const fixed = assignments.some((assignment) => matchesFixedSlot(assignment, session));
     const answered = bookings.some((booking) => booking.course_session_id === session.id && ["confirmed", "cancelled", "present", "absent"].includes(booking.status));
     if (!fixed || answered) return [];
 
-    const start = new Date(session.start_time);
-    const deadline = new Date(start.getTime() - 6 * 60 * 60 * 1000);
-    const reminders = [24, 8]
-      .map((hours) => new Date(start.getTime() - hours * 60 * 60 * 1000))
-      .filter((at) => at.getTime() > now && at.getTime() < deadline.getTime());
+    const deadline = confirmationDeadline(session);
+    const reminders = reminderTimes(session, now);
     return reminders.map((at, index) => ({
       id: idFor(session.id, index),
       title: "Conferma il corso",
-      body: `${session.course?.name ?? "Corso"}: conferma o rinuncia entro le ${deadline.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}.`,
+      body: `${session.course?.name ?? "Corso"}: conferma o rinuncia entro ${deadline.toLocaleString("it-IT", { timeZone: GYM_TIME_ZONE, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} (ora italiana).`,
       schedule: { at },
-      extra: { kind: "course-confirmation", sessionId: session.id },
+      extra: { kind: "course-confirmation", sessionId: session.id, userId },
     }));
   });
 
-  if (notifications.length) await LocalNotifications.schedule({ notifications });
+  if (notifications.length && version === reminderVersion) await LocalNotifications.schedule({ notifications });
+  });
 }

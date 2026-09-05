@@ -32,7 +32,7 @@ const ExerciseVideoRecorder = ({ exerciseName, compact = false, className }: Exe
         includeMetadata: false,
       });
 
-      if (result.saved === false) {
+      if (result.saved !== true) {
         toast.warning("Video registrato, ma non salvato in Foto. Controlla i permessi dell’app.");
         return;
       }

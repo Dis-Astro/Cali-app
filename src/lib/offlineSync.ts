@@ -56,6 +56,25 @@ const listeners = new Set<Listener>();
 let initialized = false;
 let flushPromise: Promise<void> | null = null;
 let retryTimer: number | null = null;
+let queueMutation: Promise<unknown> = Promise.resolve();
+
+// Lock only storage transactions, never network requests. Web Locks also
+// coordinate browser tabs; the promise fallback coordinates the native runtime.
+function mutateQueue(transform: (queue: PendingOperation[]) => PendingOperation[]) {
+  const transaction = async () => {
+    const queue = transform(await readQueue());
+    await writeQueue(queue);
+    return queue;
+  };
+  const next = queueMutation.then(async () => {
+    if (typeof navigator !== "undefined" && navigator.locks) {
+      return await navigator.locks.request(QUEUE_KEY, transaction);
+    }
+    return await transaction();
+  });
+  queueMutation = next.catch(() => undefined);
+  return next;
+}
 const snapshot: OfflineSnapshot = {
   isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   isSyncing: false,
@@ -245,17 +264,16 @@ export async function getPendingWorkoutCompletions(clientId: string) {
 }
 
 async function enqueue(operation: PendingOperation) {
-  const queue = await readQueue();
-  const existingIndex = queue.findIndex((item) => item.dedupeKey === operation.dedupeKey);
-  if (existingIndex >= 0) {
-    operation.id = queue[existingIndex].id;
-    operation.createdAt = queue[existingIndex].createdAt;
-    operation.attempts = queue[existingIndex].attempts;
-    queue[existingIndex] = operation;
-  } else {
-    queue.push(operation);
-  }
-  await writeQueue(queue);
+  await mutateQueue((queue) => {
+    const existingIndex = queue.findIndex((item) => item.dedupeKey === operation.dedupeKey);
+    if (existingIndex >= 0) {
+      operation.createdAt = queue[existingIndex].createdAt;
+      queue[existingIndex] = operation;
+    } else {
+      queue.push(operation);
+    }
+    return queue;
+  });
 
   if (typeof navigator === "undefined" || navigator.onLine) await flushPendingOperations();
   const remaining = await readQueue();
@@ -269,7 +287,7 @@ export async function queueWorkoutCompletion(payload: WorkoutCompletionPayload) 
   const now = new Date().toISOString();
   const dedupeKey = workoutDedupeKey(payload);
   return enqueue({
-    id: `${dedupeKey}:${Date.now()}`,
+    id: crypto.randomUUID(),
     type: "workout_completion",
     dedupeKey,
     createdAt: now,
@@ -283,7 +301,7 @@ export async function queueErrorReport(payload: ErrorReportPayload) {
   const now = new Date().toISOString();
   const dedupeKey = reportDedupeKey(payload);
   return enqueue({
-    id: `${dedupeKey}:${Date.now()}`,
+    id: crypto.randomUUID(),
     type: "error_report",
     dedupeKey,
     createdAt: now,
@@ -307,26 +325,30 @@ export async function flushPendingOperations() {
     snapshot.lastError = null;
     emit();
 
-    let queue = await readQueue();
-
-    for (const operation of [...queue]) {
+    while (typeof navigator === "undefined" || navigator.onLine) {
+      // Never replay a previous account's operations under another session.
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (authError || !data.user) break;
+      await queueMutation;
+      const operation = (await readQueue()).find((item) => item.payload.clientId === data.user.id);
+      if (!operation) break;
       try {
         if (operation.type === "workout_completion") await syncWorkoutCompletion(operation);
         if (operation.type === "error_report") await syncErrorReport(operation);
 
-        queue = queue.filter((item) => item.id !== operation.id);
-        await writeQueue(queue);
+        // A newer edit has a different revision id and must survive this ack.
+        await mutateQueue((queue) => queue.filter((item) => item.id !== operation.id));
       } catch (error) {
         operation.attempts += 1;
         operation.updatedAt = new Date().toISOString();
-        queue = queue.map((item) => (item.id === operation.id ? operation : item));
-        await writeQueue(queue);
+        await mutateQueue((queue) => queue.map((item) => (item.id === operation.id ? operation : item)));
         snapshot.lastError = error instanceof Error ? error.message : "Sincronizzazione non riuscita";
         scheduleRetry();
         break;
       }
     }
 
+    const queue = await readQueue();
     if (queue.length === 0) {
       snapshot.lastSyncAt = new Date().toISOString();
       snapshot.lastError = null;
@@ -336,7 +358,12 @@ export async function flushPendingOperations() {
     snapshot.isSyncing = false;
     snapshot.pendingCount = queue.length;
     emit();
-  })().finally(() => {
+  })().catch((error) => {
+    snapshot.lastError = error instanceof Error ? error.message : "Sincronizzazione non riuscita";
+    scheduleRetry();
+  }).finally(() => {
+    snapshot.isSyncing = false;
+    emit();
     flushPromise = null;
   });
 

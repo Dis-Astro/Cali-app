@@ -4,6 +4,7 @@ const storage = new Map<string, string>();
 const insert = vi.fn(async () => ({ error: null }));
 const maybeSingle = vi.fn(async () => ({ data: null, error: null }));
 const update = vi.fn(() => queryBuilder);
+const getUser = vi.fn(async () => ({ data: { user: { id: "client-1" } }, error: null }));
 
 const queryBuilder: any = {
   select: vi.fn(() => queryBuilder),
@@ -26,7 +27,7 @@ vi.mock("@capacitor/preferences", () => ({
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: vi.fn(() => queryBuilder) },
+  supabase: { from: vi.fn(() => queryBuilder), auth: { getUser } },
 }));
 
 function setOnline(value: boolean) {
@@ -42,6 +43,8 @@ describe("offline synchronization queue", () => {
     insert.mockClear();
     maybeSingle.mockClear();
     update.mockClear();
+    getUser.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "client-1" } }, error: null });
     setOnline(false);
     vi.resetModules();
   });
@@ -105,5 +108,72 @@ describe("offline synchronization queue", () => {
     expect(insert).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ id: "report-local-1" }));
     expect(sync.getOfflineSnapshot().pendingCount).toBe(0);
+  });
+
+  const note = (exercise: string, clientNotes = "Nota") => ({
+    clientId: "client-1", workoutPlanExerciseId: exercise, weekNumber: 1,
+    difficultyRating: 5, clientNotes,
+  });
+
+  it("preserves concurrent offline writes and restores them after module restart", async () => {
+    const sync = await import("./offlineSync");
+    await Promise.all(Array.from({ length: 12 }, (_, i) => sync.queueWorkoutCompletion(note(`exercise-${i}`))));
+    vi.resetModules();
+    const restarted = await import("./offlineSync");
+    expect(await restarted.getPendingWorkoutCompletions("client-1")).toHaveLength(12);
+  });
+
+  it("retains a newer edit and a new operation arriving during an upload", async () => {
+    const sync = await import("./offlineSync");
+    await sync.queueWorkoutCompletion(note("exercise-1", "Prima"));
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const uploading = new Promise<void>((resolve) => { started = resolve; });
+    insert.mockImplementationOnce(async () => {
+      started();
+      await blocked;
+      return { error: null };
+    });
+    setOnline(true);
+    const flushing = sync.flushPendingOperations();
+    await uploading;
+    setOnline(false);
+    await sync.queueWorkoutCompletion(note("exercise-1", "Aggiornata"));
+    await sync.queueWorkoutCompletion(note("exercise-2"));
+    release();
+    await flushing;
+    const pending = await sync.getPendingWorkoutCompletions("client-1");
+    expect(pending).toHaveLength(2);
+    expect(pending[0].payload.clientNotes).toBe("Aggiornata");
+    setOnline(true);
+    await sync.flushPendingOperations();
+    expect(await sync.getPendingWorkoutCompletions("client-1")).toHaveLength(0);
+  });
+
+  it("does not upload another account's saved notes", async () => {
+    const sync = await import("./offlineSync");
+    await sync.queueWorkoutCompletion(note("exercise-1"));
+    await sync.queueWorkoutCompletion({ ...note("exercise-2"), clientId: "client-2" });
+    getUser.mockResolvedValue({ data: { user: { id: "client-2" } }, error: null });
+    setOnline(true);
+    await sync.flushPendingOperations();
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ client_id: "client-2" }));
+    expect(await sync.getPendingWorkoutCompletions("client-1")).toHaveLength(1);
+  });
+
+  it("stops replaying the old account after an account change during upload", async () => {
+    const sync = await import("./offlineSync");
+    await sync.queueWorkoutCompletion(note("exercise-1"));
+    await sync.queueWorkoutCompletion(note("exercise-2"));
+    insert.mockImplementationOnce(async () => {
+      getUser.mockResolvedValue({ data: { user: { id: "client-2" } }, error: null });
+      return { error: null };
+    });
+    setOnline(true);
+    await sync.flushPendingOperations();
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(await sync.getPendingWorkoutCompletions("client-1")).toHaveLength(1);
   });
 });

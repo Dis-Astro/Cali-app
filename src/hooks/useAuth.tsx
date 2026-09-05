@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { Preferences } from "@capacitor/preferences";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { downloadWorkoutPlanForOffline } from "@/lib/offlineWorkout";
+import { clearCourseReminders } from "@/features/course-booking/courseReminders";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -66,9 +67,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [offlineUserId, setOfflineUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const identityVersion = useRef(0);
 
-  const resolveProfile = async (userId: string) => {
+  const resolveProfile = async (userId: string, version: number) => {
     const cached = await readCachedProfile(userId);
+    if (identityVersion.current !== version) return null;
     if (cached) setProfile(cached);
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -80,12 +83,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (PROFILE_RETRY_DELAYS_MS[attempt]) {
         await new Promise((resolve) => window.setTimeout(resolve, PROFILE_RETRY_DELAYS_MS[attempt]));
       }
+      if (identityVersion.current !== version) return null;
       try {
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
           .eq("user_id", userId)
           .maybeSingle();
+        if (identityVersion.current !== version) return null;
         if (error) throw error;
         if (!data) return cached;
 
@@ -112,19 +117,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const applySession = async (nextSession: Session | null, allowOfflineFallback = true) => {
       if (!mounted) return;
+      const version = ++identityVersion.current;
+      setProfile(null);
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
         setOfflineUserId(nextSession.user.id);
         await Preferences.set({ key: LAST_USER_KEY, value: nextSession.user.id });
-        await resolveProfile(nextSession.user.id);
+        await resolveProfile(nextSession.user.id, version);
       } else {
         const { value: cachedUserId } = await Preferences.get({ key: LAST_USER_KEY });
+        if (!mounted || identityVersion.current !== version) return;
         const canUseOfflineIdentity = allowOfflineFallback && !navigator.onLine && Boolean(cachedUserId);
         if (canUseOfflineIdentity && cachedUserId) {
           setOfflineUserId(cachedUserId);
-          setProfile(await readCachedProfile(cachedUserId));
+          const cached = await readCachedProfile(cachedUserId);
+          if (!mounted || identityVersion.current !== version) return;
+          setProfile(cached);
         } else {
           setOfflineUserId(null);
           setProfile(null);
@@ -132,14 +142,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      if (mounted) setLoading(false);
+      if (mounted && identityVersion.current === version) setLoading(false);
     };
 
     const bootstrap = async () => {
+      const version = identityVersion.current;
       const { value: cachedUserId } = await Preferences.get({ key: LAST_USER_KEY });
       if (cachedUserId) {
         const cachedProfile = await readCachedProfile(cachedUserId);
-        if (mounted && cachedProfile) {
+        if (mounted && identityVersion.current === version && cachedProfile) {
           setOfflineUserId(cachedUserId);
           setProfile(cachedProfile);
         }
@@ -147,31 +158,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       try {
         const { data: { session: existingSession } } = await supabase.auth.getSession();
+        if (!mounted || identityVersion.current !== version) return;
         await applySession(existingSession);
       } catch {
+        if (!mounted || identityVersion.current !== version) return;
         await applySession(null);
       }
-      if (!mounted) return;
-
-      const authListener = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        window.setTimeout(() => void applySession(nextSession), 0);
-      });
-      subscription = authListener.data.subscription;
     };
 
     const refreshSession = () => {
-      if (!navigator.onLine) return;
-      void supabase.auth.getSession().then(({ data: { session: currentSession } }) =>
-        applySession(currentSession, false),
-      );
+      if (!navigator.onLine || document.visibilityState === "hidden") return;
+      const version = identityVersion.current;
+      void supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+        if (mounted && identityVersion.current === version) return applySession(currentSession, false);
+      }).catch(() => { /* Keep the current identity on transient network errors. */ });
     };
 
+    subscription = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      const version = ++identityVersion.current;
+      window.setTimeout(() => {
+        if (mounted && identityVersion.current === version) void applySession(nextSession);
+      }, 0);
+    }).data.subscription;
     void bootstrap();
     window.addEventListener("online", refreshSession);
     document.addEventListener("visibilitychange", refreshSession);
 
     return () => {
       mounted = false;
+      identityVersion.current++;
       subscription?.unsubscribe();
       window.removeEventListener("online", refreshSession);
       document.removeEventListener("visibilitychange", refreshSession);
@@ -179,20 +194,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    const requestVersion = ++identityVersion.current;
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (data.session?.user) {
+    if (data.session?.user && identityVersion.current === requestVersion) {
+      const version = ++identityVersion.current;
+      setProfile(null);
       setSession(data.session);
       setUser(data.session.user);
       setOfflineUserId(data.session.user.id);
       await Preferences.set({ key: LAST_USER_KEY, value: data.session.user.id });
-      await resolveProfile(data.session.user.id);
-      setLoading(false);
+      await resolveProfile(data.session.user.id, version);
+      if (identityVersion.current === version) setLoading(false);
     }
     return { error };
   };
 
   const signOut = async () => {
+    identityVersion.current++;
     const currentUserId = user?.id || offlineUserId;
+    setSession(null);
+    setUser(null);
+    setOfflineUserId(null);
+    setProfile(null);
+    setLoading(false);
+    await clearCourseReminders().catch(() => console.warn("Cancellazione promemoria non riuscita"));
     await Preferences.remove({ key: LAST_USER_KEY });
     if (currentUserId) await Preferences.remove({ key: `${PROFILE_CACHE_PREFIX}${currentUserId}` });
     await supabase.auth.signOut({ scope: "local" });
