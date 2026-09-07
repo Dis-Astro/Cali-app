@@ -48,7 +48,10 @@ describe("workout timer model", () => {
     expect(getTimerSnapshot(tabata, 5_000).phase).toBe("work");
     expect(getTimerSnapshot(tabata, 22_000).phase).toBe("rest");
     expect(getTimerSnapshot(tabata, 31_000).round).toBe(2);
-    expect(getTimerTotalMs(tabata)).toBe(230_000);
+    // Eight complete 20s/10s cycles: include the last recovery too.
+    expect(getTimerTotalMs(tabata)).toBe(240_000);
+    expect(getTimerSnapshot(tabata, 235_000)).toMatchObject({ round: 8, phase: "rest", finished: false });
+    expect(getTimerSnapshot(tabata, 240_000).finished).toBe(true);
   });
 
   it("usa un cronometro senza limite", () => {

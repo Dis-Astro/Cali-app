@@ -4,6 +4,27 @@
 @tailwind components;
 @tailwind utilities;
 
+.workout-clock [data-testid="timer-display"] {
+  font-size: clamp(3rem, min(27vw, 20dvh), 13rem);
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .workout-clock {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 210px;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .workout-clock > header { grid-column: 1 / -1; padding-top: 4px; padding-bottom: 4px; }
+  .workout-clock > details { grid-column: 1 / -1; max-height: 44px; }
+  .workout-clock > main { grid-column: 1; grid-row: 3; padding: 4px 12px; }
+  .workout-clock > footer { grid-column: 2; grid-row: 3; align-self: center; padding: 8px 12px; }
+  .workout-clock > footer button { height: 40px; font-size: 14px; }
+  .workout-clock .timer-round-counter { margin-top: 4px; padding: 4px; gap: 8px; }
+  .workout-clock .timer-round-counter button { width: 36px; height: 36px; }
+  .workout-clock .timer-round-counter > div { min-width: 56px; }
+  .workout-clock .timer-round-counter p:last-child { font-size: 30px; }
+}
+
 /* Design System - Super Power Gym */
 
 @layer base {

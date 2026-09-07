@@ -15,9 +15,15 @@ const TIMER_STATE_KEY = "spg:active-workout-timer:v1";
 
 interface StoredTimerState {
   mode: WorkoutTimerConfig["mode"];
+  configKey: string;
   status: "running" | "paused";
   startedAt: number | null;
   accumulatedMs: number;
+}
+
+export function timerConfigKey(config: WorkoutTimerConfig) {
+  return [config.mode, config.durationSeconds, config.intervalSeconds, config.workSeconds,
+    config.restSeconds, config.rounds, config.emomOpenEnded].join(":");
 }
 
 function readTimerState(config: WorkoutTimerConfig): StoredTimerState | null {
@@ -25,7 +31,11 @@ function readTimerState(config: WorkoutTimerConfig): StoredTimerState | null {
     const raw = localStorage.getItem(TIMER_STATE_KEY);
     if (!raw) return null;
     const stored = JSON.parse(raw) as StoredTimerState;
-    return stored.mode === config.mode ? stored : null;
+    const valid = stored.configKey === timerConfigKey(config)
+      && ["running", "paused"].includes(stored.status)
+      && Number.isFinite(stored.accumulatedMs) && stored.accumulatedMs >= 0
+      && (stored.status === "paused" ? stored.startedAt === null : Number.isFinite(stored.startedAt));
+    return valid ? stored : null;
   } catch {
     return null;
   }
@@ -78,14 +88,14 @@ export function useWorkoutTimer(config: WorkoutTimerConfig) {
     }
   }, [releaseWakeLock]);
 
-  const start = useCallback(() => {
+  const start = useCallback((startsAt = Date.now()) => {
     accumulatedRef.current = 0;
-    startedAtRef.current = Date.now();
-    setElapsedMs(0);
+    startedAtRef.current = startsAt;
+    setElapsedMs(Math.max(0, Date.now() - startsAt));
     setStatus("running");
-    writeTimerState({ mode: config.mode, status: "running", startedAt: startedAtRef.current, accumulatedMs: 0 });
+    writeTimerState({ mode: config.mode, configKey: timerConfigKey(config), status: "running", startedAt: startedAtRef.current, accumulatedMs: 0 });
     void requestWakeLock();
-  }, [config.mode, requestWakeLock]);
+  }, [config, requestWakeLock]);
 
   const pause = useCallback(() => {
     if (startedAtRef.current === null) return;
@@ -93,17 +103,17 @@ export function useWorkoutTimer(config: WorkoutTimerConfig) {
     startedAtRef.current = null;
     setElapsedMs(accumulatedRef.current);
     setStatus("paused");
-    writeTimerState({ mode: config.mode, status: "paused", startedAt: null, accumulatedMs: accumulatedRef.current });
+    writeTimerState({ mode: config.mode, configKey: timerConfigKey(config), status: "paused", startedAt: null, accumulatedMs: accumulatedRef.current });
     void releaseWakeLock();
-  }, [calculateElapsed, config.mode, releaseWakeLock]);
+  }, [calculateElapsed, config, releaseWakeLock]);
 
   const resume = useCallback(() => {
     if (startedAtRef.current !== null) return;
     startedAtRef.current = Date.now();
     setStatus("running");
-    writeTimerState({ mode: config.mode, status: "running", startedAt: startedAtRef.current, accumulatedMs: accumulatedRef.current });
+    writeTimerState({ mode: config.mode, configKey: timerConfigKey(config), status: "running", startedAt: startedAtRef.current, accumulatedMs: accumulatedRef.current });
     void requestWakeLock();
-  }, [config.mode, requestWakeLock]);
+  }, [config, requestWakeLock]);
 
   const reset = useCallback(() => {
     startedAtRef.current = null;

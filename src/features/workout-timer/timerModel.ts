@@ -12,7 +12,7 @@ export function getTimerTotalMs(config: WorkoutTimerConfig): number | null {
     case "tabata":
       return (
         secondsToMs(config.workSeconds) * Math.max(1, config.rounds)
-        + secondsToMs(config.restSeconds) * Math.max(0, config.rounds - 1)
+        + secondsToMs(config.restSeconds) * Math.max(1, config.rounds)
       );
     case "countdown":
     case "amrap":

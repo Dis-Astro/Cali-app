@@ -29,6 +29,7 @@ import { formatTimerTime } from "./timerModel";
 import { playTimerTone, speakTimerMessage, unlockTimerAudio } from "./timerFeedback";
 import { useTimerAudioCues, type TimerAudioEvent } from "./timerAudioCues";
 import { useWorkoutTimer } from "./useWorkoutTimer";
+import { loadTimerSettings, saveTimerSettings } from "./timerSettings";
 import {
   DEFAULT_TIMER_CONFIG,
   TIMER_MODE_LABELS,
@@ -36,7 +37,14 @@ import {
   type WorkoutTimerMode,
 } from "./types";
 
-const MODES: WorkoutTimerMode[] = ["countdown", "stopwatch", "emom", "tabata", "amrap"];
+const MODES: WorkoutTimerMode[] = ["amrap", "stopwatch", "emom", "tabata", "countdown"];
+const MODE_COLORS: Record<WorkoutTimerMode, string> = {
+  amrap: "border-orange-400/50 bg-orange-400/10 text-orange-300",
+  stopwatch: "border-sky-400/50 bg-sky-400/10 text-sky-300",
+  emom: "border-violet-400/50 bg-violet-400/10 text-violet-300",
+  tabata: "border-emerald-400/50 bg-emerald-400/10 text-emerald-300",
+  countdown: "border-white/20 bg-white/5 text-white/80",
+};
 const START_PREPARATION_SECONDS = 10;
 const MOTIVATIONAL_MESSAGES = [
   "Grande lavoro. Un passo in più verso il tuo obiettivo!",
@@ -98,9 +106,9 @@ function TimeField({
   onChange: (value: number) => void;
 }) {
   const minutes = Math.floor(value / 60);
-  const seconds = Math.floor((value % 60) / 10) * 10;
+  const seconds = value % 60;
   const update = (nextMinutes: number, nextSeconds: number) => {
-    onChange(Math.max(10, Math.min(maxMinutes * 60 + 50, nextMinutes * 60 + nextSeconds)));
+    onChange(Math.max(1, Math.min(maxMinutes * 60 + 59, nextMinutes * 60 + nextSeconds)));
   };
 
   return (
@@ -108,13 +116,13 @@ function TimeField({
       <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</legend>
       <div className="grid grid-cols-2 gap-2">
         <ScrollSelect label="Minuti" value={minutes} options={numericOptions(0, maxMinutes)} format={(option) => `${option} min`} onChange={(next) => update(next, seconds)} />
-        <ScrollSelect label="Secondi" value={seconds} options={numericOptions(0, 50, 10)} format={(option) => `${option} sec`} onChange={(next) => update(minutes, next)} />
+        <ScrollSelect label="Secondi" value={seconds} options={numericOptions(0, 59)} format={(option) => `${option} sec`} onChange={(next) => update(minutes, next)} />
       </div>
     </fieldset>
   );
 }
 
-function TimerConfiguration({ config, onChange }: { config: WorkoutTimerConfig; onChange: (config: WorkoutTimerConfig) => void }) {
+export function TimerConfiguration({ config, onChange }: { config: WorkoutTimerConfig; onChange: (config: WorkoutTimerConfig) => void }) {
   const update = <Key extends keyof WorkoutTimerConfig>(key: Key, value: WorkoutTimerConfig[Key]) => {
     onChange({ ...config, [key]: value });
   };
@@ -162,10 +170,10 @@ function TimerConfiguration({ config, onChange }: { config: WorkoutTimerConfig; 
     );
   }
 
-  return <TimeField label="Durata libera" value={config.durationSeconds} onChange={(value) => update("durationSeconds", value)} />;
+  return <TimeField label="Durata AMRAP" value={config.durationSeconds} onChange={(value) => update("durationSeconds", value)} />;
 }
 
-function WorkoutTimerScreen({
+export function WorkoutTimerScreen({
   config,
   exerciseName,
   exerciseNotes,
@@ -179,6 +187,7 @@ function WorkoutTimerScreen({
   onComplete?: () => void;
 }) {
   const timer = useWorkoutTimer(config);
+  const startTimer = timer.start;
   const requiredAudioEvents = useMemo<TimerAudioEvent[]>(() => {
     const events: TimerAudioEvent[] = ["start", "finish", "motivation"];
     const hasFiniteDuration = config.mode !== "stopwatch" && !(config.mode === "emom" && config.emomOpenEnded);
@@ -198,10 +207,12 @@ function WorkoutTimerScreen({
   const finishPlayedRef = useRef(false);
   const halfwayPlayedRef = useRef(false);
   const lastRoundPlayedRef = useRef(false);
-  const preStartTimeoutsRef = useRef<number[]>([]);
+  const preparationIntervalRef = useRef<number | null>(null);
+  const preparationGeneration = useRef(0);
   const announcementTimeoutRef = useRef<number | null>(null);
   const completionTimeoutRef = useRef<number | null>(null);
   const completionOpenedRef = useRef(false);
+  const autoStartedRef = useRef(false);
 
   const showAnnouncement = useCallback((message: string, speak = true) => {
     setAnnouncement(message);
@@ -210,11 +221,15 @@ function WorkoutTimerScreen({
     announcementTimeoutRef.current = window.setTimeout(() => setAnnouncement(null), 2400);
   }, [config.silent]);
 
-  const cancelPreStart = useCallback(() => {
-    preStartTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
-    preStartTimeoutsRef.current = [];
-    setPreStartCount(null);
+  const clearPreparation = useCallback(() => {
+    preparationGeneration.current++;
+    if (preparationIntervalRef.current !== null) window.clearInterval(preparationIntervalRef.current);
+    preparationIntervalRef.current = null;
   }, []);
+  const cancelPreStart = useCallback(() => {
+    clearPreparation();
+    setPreStartCount(null);
+  }, [clearPreparation]);
 
   const playEvent = useCallback(async (eventType: TimerAudioEvent, fallback: () => void) => {
     if (config.silent) return false;
@@ -227,22 +242,22 @@ function WorkoutTimerScreen({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      clearPreparation();
       document.body.style.overflow = previousOverflow;
-      preStartTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
       if (announcementTimeoutRef.current !== null) window.clearTimeout(announcementTimeoutRef.current);
       if (completionTimeoutRef.current !== null) window.clearTimeout(completionTimeoutRef.current);
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       stopCustomAudio();
     };
-  }, [stopCustomAudio]);
+  }, [clearPreparation, stopCustomAudio]);
 
   useEffect(() => {
     const currentSecond = Math.ceil(timer.snapshot.mainRemainingMs / 1000);
-    if (timer.status === "running" && currentSecond !== previousSecondRef.current && currentSecond >= 1 && currentSecond <= 3) {
+    if (config.mode !== "stopwatch" && timer.status === "running" && currentSecond !== previousSecondRef.current && currentSecond >= 1 && currentSecond <= 3) {
       playTimerTone("tick", config.silent);
     }
     previousSecondRef.current = currentSecond;
-  }, [config.silent, timer.snapshot.mainRemainingMs, timer.status]);
+  }, [config.mode, config.silent, timer.snapshot.mainRemainingMs, timer.status]);
 
   useEffect(() => {
     if (timer.status === "running" && previousPhaseRef.current !== timer.snapshot.phase) {
@@ -303,7 +318,7 @@ function WorkoutTimerScreen({
         await playEvent("finish", () => playTimerTone("finish", config.silent));
         await playEvent("motivation", () => speakTimerMessage(motivationalMessage, config.silent));
       })();
-      if (!completionOpenedRef.current) {
+      if (onComplete && !completionOpenedRef.current) {
         completionOpenedRef.current = true;
         completionTimeoutRef.current = window.setTimeout(() => {
           onClose();
@@ -319,31 +334,40 @@ function WorkoutTimerScreen({
     }
   }, [config.silent, motivationalMessage, onClose, onComplete, playEvent, showAnnouncement, timer.status]);
 
-  const handleStart = async () => {
-    await Promise.all([
-      unlockTimerAudio().catch(() => undefined),
-      primeCustomAudio().catch(() => undefined),
-    ]);
+  const handleStart = useCallback(async () => {
     cancelPreStart();
+    const generation = preparationGeneration.current;
     setPreStartCount(START_PREPARATION_SECONDS);
+    void primeCustomAudio().catch(() => undefined);
+    await unlockTimerAudio().catch(() => undefined);
+    if (preparationGeneration.current !== generation) return;
+    autoStartedRef.current = true;
+    const startsAt = Date.now() + START_PREPARATION_SECONDS * 1000;
+    let lastCount = START_PREPARATION_SECONDS;
     playTimerTone("tick", config.silent);
-    Array.from({ length: START_PREPARATION_SECONDS - 1 }, (_, index) => START_PREPARATION_SECONDS - index - 1).forEach((value) => {
-      const timeout = window.setTimeout(() => {
-        setPreStartCount(value);
-        if (value <= 3) playTimerTone("tick", config.silent);
-      }, (START_PREPARATION_SECONDS - value) * 1000);
-      preStartTimeoutsRef.current.push(timeout);
-    });
-    preStartTimeoutsRef.current.push(window.setTimeout(() => {
-      setPreStartCount(null);
-      void playEvent("start", () => {
-        playTimerTone("start", config.silent);
-        speakTimerMessage("Via", config.silent);
-      });
-      timer.start();
-      preStartTimeoutsRef.current = [];
-    }, START_PREPARATION_SECONDS * 1000));
-  };
+    preparationIntervalRef.current = window.setInterval(() => {
+      const count = Math.max(0, Math.ceil((startsAt - Date.now()) / 1000));
+      if (count !== lastCount) {
+        setPreStartCount(count);
+        if (count > 0 && count <= 3) playTimerTone("tick", config.silent);
+        lastCount = count;
+      }
+      if (count === 0) {
+        clearPreparation();
+        setPreStartCount(null);
+        void playEvent("start", () => {
+          playTimerTone("start", config.silent);
+          speakTimerMessage("Via", config.silent);
+        });
+        startTimer(startsAt);
+      }
+    }, 100);
+  }, [cancelPreStart, clearPreparation, config.silent, playEvent, primeCustomAudio, startTimer]);
+
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (timer.status === "idle") void handleStart();
+  }, [handleStart, timer.status]);
 
   const handleReset = () => {
     if (preStartCount !== null) {
@@ -351,6 +375,8 @@ function WorkoutTimerScreen({
       return;
     }
     if (timer.status !== "idle" && !window.confirm("Azzerare il timer corrente?")) return;
+    if (completionTimeoutRef.current !== null) window.clearTimeout(completionTimeoutRef.current);
+    completionTimeoutRef.current = null;
     timer.reset();
     setAmrapRounds(0);
   };
@@ -361,9 +387,9 @@ function WorkoutTimerScreen({
   };
 
   const handleClose = () => {
+    if ((timer.status === "running" || timer.status === "paused" || preStartCount !== null) && !window.confirm("Chiudere e azzerare questa sessione?")) return;
     cancelPreStart();
     stopCustomAudio();
-    if (timer.status === "running" && !window.confirm("Il timer è in esecuzione. Vuoi chiuderlo?")) return;
     timer.reset();
     onClose();
   };
@@ -378,7 +404,7 @@ function WorkoutTimerScreen({
         : "text-foreground";
 
   return (
-    <div className="fixed inset-0 z-[100] flex min-h-[100dvh] flex-col overflow-hidden bg-black text-white native-safe-top native-safe-bottom" data-testid="workout-timer-screen">
+    <div className="workout-clock fixed inset-0 z-[100] flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-black text-white native-safe-top native-safe-bottom" data-testid="workout-timer-screen">
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 native-safe-x">
         <div className="min-w-0">
           <p className="font-display text-2xl tracking-widest text-primary">{TIMER_MODE_LABELS[config.mode].title.toUpperCase()}</p>
@@ -392,11 +418,10 @@ function WorkoutTimerScreen({
       </header>
 
       {(exerciseName || exerciseNotes) && (
-        <section className="mx-4 max-h-28 shrink-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-left native-safe-x">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Esercizio</p>
-          {exerciseName && <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-white/90"><ColoredKeywordText text={exerciseName} /></p>}
+        <details className="mx-4 max-h-28 shrink-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2 text-left native-safe-x">
+          <summary className="cursor-pointer truncate text-sm font-semibold text-white/80">{exerciseName || "Note esercizio"}</summary>
           {exerciseNotes && <p className="mt-2 whitespace-pre-wrap break-words border-t border-white/10 pt-2 text-xs leading-relaxed text-white/65"><ColoredKeywordText text={exerciseNotes} /></p>}
-        </section>
+        </details>
       )}
 
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center px-5 text-center native-safe-x">
@@ -420,7 +445,7 @@ function WorkoutTimerScreen({
         )}
 
         {config.mode === "amrap" && (
-          <div className="mt-8 flex items-center gap-5 rounded-3xl border border-white/10 bg-white/5 p-3">
+          <div className="timer-round-counter mt-4 flex items-center gap-5 rounded-3xl border border-white/10 bg-white/5 p-3">
             <button type="button" onClick={() => setAmrapRounds((value) => Math.max(0, value - 1))} className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10" aria-label="Rimuovi round">
               <Minus className="h-6 w-6" />
             </button>
@@ -456,7 +481,7 @@ function WorkoutTimerScreen({
             <Play className="mr-2 h-6 w-6 fill-current" /> Riprendi
           </Button>
         )}
-        {(timer.status === "running" || timer.status === "paused") && ((config.mode === "emom" && config.emomOpenEnded) || config.mode === "stopwatch") && (
+        {(timer.status === "running" || timer.status === "paused") && (
           <Button variant="outline" onClick={handleFinish} className="h-11 w-full rounded-xl border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary">
             Termina sessione
           </Button>
@@ -481,8 +506,11 @@ export default function WorkoutTimerLauncher({ exerciseName, exerciseNotes, onCo
   const [sheetOpen, setSheetOpen] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
   const [config, setConfig] = useState<WorkoutTimerConfig>(DEFAULT_TIMER_CONFIG);
+  const [selectedMode, setSelectedMode] = useState(false);
 
   const launchTimer = () => {
+    saveTimerSettings(config);
+    void unlockTimerAudio().catch(() => undefined);
     setSheetOpen(false);
     setTimerOpen(true);
   };
@@ -494,6 +522,7 @@ export default function WorkoutTimerLauncher({ exerciseName, exerciseNotes, onCo
         type="button"
         onClick={(event) => {
           event.stopPropagation();
+          setSelectedMode(false);
           setSheetOpen(true);
         }}
         className="flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 text-primary transition hover:bg-primary/15 active:scale-95"
@@ -505,28 +534,24 @@ export default function WorkoutTimerLauncher({ exerciseName, exerciseNotes, onCo
       </button>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-3xl border-white/10 px-4 pb-[calc(1rem+var(--safe-bottom))] pt-4 sm:mx-auto sm:max-w-lg">
+        <SheetContent side="bottom" className="flex h-[88dvh] flex-col gap-0 overflow-hidden rounded-t-3xl border-white/10 bg-background px-4 pb-[calc(1rem+var(--safe-bottom))] pt-4 sm:mx-auto sm:max-w-lg">
           <SheetHeader className="pr-8 text-left">
             <SheetTitle className="flex items-center gap-2 font-display text-3xl tracking-wider"><TimerReset className="h-6 w-6 text-primary" /> TIMER</SheetTitle>
-            <SheetDescription>Scegli liberamente la modalità. La scheda e le note del coach non vengono modificate.</SheetDescription>
+            <SheetDescription>{selectedMode ? "Imposta il tempo, poi avvia." : "Scegli il tuo allenamento."}</SheetDescription>
           </SheetHeader>
 
-          <div className="mt-4">
-            <label className="space-y-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tipo timer</span>
-              <div className="relative">
-                <select
-                  value={config.mode}
-                  onChange={(event) => setConfig((current) => ({ ...current, mode: event.target.value as WorkoutTimerMode }))}
-                  className="h-12 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-9 text-base font-semibold outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {MODES.map((mode) => <option key={mode} value={mode}>{TIMER_MODE_LABELS[mode].title}</option>)}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              </div>
-            </label>
-            <p className="mt-1.5 text-xs text-muted-foreground">{TIMER_MODE_LABELS[config.mode].description}</p>
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto py-4">
+          {!selectedMode ? <div className="grid gap-3">
+            {MODES.map((mode) => <button key={mode} type="button" onClick={() => {
+              setConfig(loadTimerSettings(mode));
+              setSelectedMode(true);
+            }} className={cn("rounded-2xl border px-5 py-4 text-left transition active:scale-[0.98]", MODE_COLORS[mode])}>
+              <span className="block font-display text-3xl tracking-wider">{TIMER_MODE_LABELS[mode].title}</span>
+              <span className="mt-1 block text-xs opacity-80">{TIMER_MODE_LABELS[mode].description}</span>
+            </button>)}
+          </div> : <>
+          <button type="button" onClick={() => setSelectedMode(false)} className="mb-3 text-sm text-muted-foreground">← Cambia modalità</button>
+          <h3 className="font-display text-3xl tracking-wider">{TIMER_MODE_LABELS[config.mode].title}</h3>
 
           <div className="mt-3">
             <TimerConfiguration config={config} onChange={setConfig} />
@@ -542,10 +567,13 @@ export default function WorkoutTimerLauncher({ exerciseName, exerciseNotes, onCo
             </span>
             {config.silent ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-primary" />}
           </button>
-
+          </>}
+          </div>
+          {selectedMode && <div className="shrink-0 border-t border-border pt-2">
           <Button onClick={launchTimer} className="mt-3 h-14 w-full rounded-2xl text-base font-bold">
-            <Play className="mr-2 h-5 w-5 fill-current" /> Apri timer
+            <Play className="mr-2 h-5 w-5 fill-current" /> Avvia · 10 secondi per prepararti
           </Button>
+          </div>}
         </SheetContent>
       </Sheet>
 

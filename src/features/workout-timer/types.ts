@@ -38,7 +38,7 @@ export const DEFAULT_TIMER_CONFIG: WorkoutTimerConfig = {
 
 export const TIMER_MODE_LABELS: Record<WorkoutTimerMode, { title: string; description: string }> = {
   countdown: { title: "Countdown", description: "Recupero o conto alla rovescia" },
-  stopwatch: { title: "Cronometro", description: "Tempo crescente / For Time" },
+  stopwatch: { title: "FOR TIME", description: "Cronometro: termina quando hai finito il lavoro" },
   emom: { title: "EMOM", description: "Un intervallo per ogni round" },
   tabata: { title: "Tabata", description: "Alterna lavoro e recupero" },
   amrap: { title: "AMRAP", description: "Più round possibili nel tempo" },
