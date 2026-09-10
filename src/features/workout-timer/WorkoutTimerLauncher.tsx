@@ -62,7 +62,7 @@ export function WorkoutTimerScreen({ config, exerciseName, exerciseNotes, sessio
     const version = feedbackGeneration.current;
     const ok = await audioPlay(event).catch(() => false);
     if (!ok && mounted.current && !silentRef.current && version === feedbackGeneration.current) fallback();
-  }, [audioPlay, silent]);
+  }, [audioPlay]);
   const clearPrep = useCallback(() => {
     generation.current++;
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
