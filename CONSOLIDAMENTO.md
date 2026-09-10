@@ -113,6 +113,9 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - [ ] Non certificare parità integrale SmartWOD: raggruppamenti MIX annidati, Watch/TV e audio con app sospesa non implementati/verificati. I video reali, le interruzioni telefoniche e il blocco schermo richiedono collaudo iPhone.
 - [ ] Rilascio definitivo ancora aperto: accesso/export del database originale Lovable, verifica RLS e concorrenza staff su PostgreSQL, backup/ripristino, migrazione con recupero aggiornamenti e riallineamento del sito. Nessun database cambiato o dismesso, nessun dato o branch cancellato.
 - [ ] iPhone di Roberto non raggiungibile il 10 settembre: l'installazione dell'8 settembre NON contiene questa revisione.
+- [x] Candidata compilata `9ae58118c3f7`, generata il 10 settembre alle 08:56:56 UTC: build web, iOS simulatore e iPhone firmata riuscite; firma verificata e build-info identico nei tre pacchetti. Identificativo `it.superpowergym.app.dev.rdisante` invariato. Applicazione pronta in `build/DerivedDataDevice/Build/Products/Debug-iphoneos/App.app`.
+- [x] Installata e avviata sul simulatore iPhone 17 Pro esistente, senza duplicare app: home autenticata visibile con sessione mantenuta. Non equivale a collaudo completo del timer con fotocamera/audio su hardware.
+- [x] Codice pubblicato su GitHub nel ramo `codex/consolidamento-affidabilita-2026-09-05`, senza merge su main né build remote avviate dall'agente. Il sito superpowergym.it e il repository separato collegato al sito non sono aggiornati da questo push.
 
 ### Uso rapido della candidata
 - Cliente: Timer → modalità → tempi/set → AVVIA IL TIMER → Play. Toccare il quadrante per pausa/ripresa; FOR TIME e Death By terminano con lo scorrimento in basso. Nell'esercizio, al termine si apre la valutazione. Video apre la registrazione nativa con salvataggio in Foto, subordinato ai permessi.
