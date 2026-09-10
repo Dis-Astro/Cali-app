@@ -1,8 +1,9 @@
 # Super Power Gym — checklist unica
 
-Aggiornamento: 7 settembre 2026. Non confondere codice locale, test, pubblicazione e installazione.
+Aggiornamento: 10 settembre 2026. Non confondere codice locale, test, pubblicazione e installazione.
 
 ## Inventario iniziale
+Inventario storico: per lo stato corrente leggere l'ultima sezione del registro; non ripetere le verifiche già superate senza una modifica pertinente.
 - Implementato: ruoli cliente/coach/admin, schede, commenti e valutazioni, timer, video nativo, corsi e gestione presenze. Esistenza nel codice non equivale a collaudo completo.
 - Difettoso: aggiornamenti concorrenti della coda offline; invio della coda senza filtro account; promemoria con scadenza fissa non coerente con la lezione.
 - Incompleto: regole corsi unificate lato server anche per staff; notifiche affidabili oltre le lezioni caricate; fonte unica web/iOS.
@@ -53,6 +54,7 @@ Aggiornamento: 7 settembre 2026. Non confondere codice locale, test, pubblicazio
 - Accessi necessari: account autorizzato al Supabase di produzione e iPhone di Roberto raggiungibile/sbloccato. Il 5 settembre devicectl lo rileva come unavailable; non usare l'iPad di un altro utente come sostituto.
 
 ## Timer — revisione del 7 settembre
+**Superata dalla verifica diretta del 9–10 settembre:** il doppio avvio e l'assenza del riposo finale Tabata erano stati interpretati erroneamente. I dettagli sotto documentano la vecchia revisione, non il comportamento attuale.
 Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/custom-workout-timer (documentazione pubblica; non collaudo diretto della loro app).
 - [x] Scelta immediata AMRAP, FOR TIME, EMOM, Tabata; mantenuto countdown per recupero. Configurazione distinta dalla scelta modalità.
 - [x] Avvio fissato fuori dall'area a scorrimento, con preparazione di 10 secondi senza un secondo pulsante di partenza.
@@ -69,3 +71,50 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - [ ] Collaudo audio, fotocamera, blocco schermo e interruzioni telefoniche su iPhone reale (ancora unavailable il 7 settembre).
 - Limiti espliciti: non è una replica integrale di SmartWOD. MIX, preset nominati, Apple Watch, TV e audio garantito con app sospesa non implementati da questa revisione. Nessuna promessa di parità in background senza lavoro nativo e collaudo.
 - Pubblicazione sito e migrazione database non eseguite con questa revisione del timer.
+
+### Segnalazione duplicati e AMRAP — 7 settembre
+- [x] Simulatore iPhone 17 Pro 2D75E861: identificata copia it.superpowergym.app con asset del 31 agosto e copia dev.rdisante del 7 settembre. Rimossa solo la prima dopo copia e confronto integrale di app e contenitore dati in build/backup-simulator-old-20260907 (locale, esclusa da Git, cartella privata). Backup recuperabile, non sincronizzato automaticamente con l'altra app.
+- [x] AMRAP: spiegazione dei giri prima dell'avvio, etichetta “Giri completati”, conteggio disabilitato durante preparazione e dopo conclusione. Test dedicato superato; controllo completo TypeScript/lint/test/build web superato.
+- [ ] Duplicato iPhone reale: non ispezionabile né rimosso perché iPhone di Roberto non raggiungibile. Occorre identificarne i contenitori e proteggere eventuali note offline prima della disinstallazione.
+- [ ] La segnalazione “non è andata a buon fine” non identifica ancora un errore riproducibile: non considerarla risolta dalla sola build. L'anteprima timer non è la webapp pubblicata né il collaudo autenticato dell'app.
+
+### Correzione ripetizioni AMRAP — 7 settembre
+- [x] Aggiunto “Ripetizioni per serie” (1–200, selettore senza tastiera), distinto dai giri completati. Il valore scelto appare prima dell'avvio e durante preparazione, lavoro e pausa; ricordato nelle impostazioni AMRAP.
+- [x] Compatibilità con impostazioni precedenti: tempi conservati, valore ripetizioni predefinito 10 se assente/non valido. Nessun ripristino di un AMRAP con obiettivo ripetizioni diverso.
+- [x] Test del flusso completo selezione 15 rep → preparazione → conteggio giri → pausa, persistenza/valori non validi e ripristino. 53 test superati in 13 file; TypeScript, lint (0 errori, 41 avvisi preesistenti), build web e build iOS superati.
+- [x] Verifica visiva browser a 375×667: campo ripetizioni e avvio visibili, 15 rep visibili nel timer in pausa. App aggiornata e avviata nel simulatore esistente, senza seconda installazione.
+- [ ] Non pubblicato sul sito né installato sull'iPhone reale, ancora irraggiungibile. Nessuna modifica database.
+
+## Candidata installata su iPhone — 8 settembre
+- [x] Timer: ripetizioni AMRAP selezionabili; giri completati salvati con il timer e recuperati dopo riavvio, senza includere il tempo in pausa. Ripristino separato per utente/esercizio; cronometro mostra solo secondi realmente trascorsi; niente feedback audio tardivo dopo chiusura.
+- [x] Offline: conteggi/metadati separati per account, invio coordinato tra schede browser, ripresa dopo autenticazione; coda illeggibile conservata e segnalata invece di sovrascriverla. Upsert sulla chiave univoca prevista dallo schema, con conferma della riga restituita prima di rimuovere la nota dalla coda. Resta da verificare il vincolo sul database reale; conflitti di contenuto fra dispositivi diversi restano last-writer-wins.
+- [x] Corsi: pending distinto da confermato con pulsante Partecipo, disponibilità per categoria, errori di caricamento espliciti; calendario/scadenze Europe/Rome e aggiornamento al cambio giorno; protezione dalle risposte tardive per un altro account. Test componenti cliente/coach e calcolo posti.
+- [x] Build: controllo coerenza URL/progetto/chiave pubblica, identificativo versione in login/Aiuto e build-info.json senza segreti. Il database della build resta quello attuale dvjhcdmuuuwepayaatup; nessun passaggio a staging implicito.
+- [x] Verifica finale locale: 103 test superati in 18 file, TypeScript superato, lint 0 errori e 41 avvisi preesistenti, build web e build iPhone firmata riuscite.
+- [x] Installata e avviata su iPhone di Roberto (iPhone 13) l'8 settembre alle 15:02, aggiornando it.superpowergym.app.dev.rdisante con team R79HPK63WH invariato. Xcode rilevava una sola copia Super Power Gym, quindi nessuna disinstallazione sul telefono. Identificativo build 60fe079adc97-local, generata 2026-09-08T13:00:58.060Z.
+- [x] Verifica avvio reale: dopo un primo controllo senza processo (causa non determinata), riapertura con diagnostica conferma WebView caricata e processo attivo; nessun indicatore fatal/TypeError/ReferenceError nei log osservati. Log diagnostici locali esclusi da Git e con permessi limitati. Non equivale a prova completa dei flussi.
+- [x] Utente conferma “funziona” aprendo l'app dall'icona sull'iPhone (8 settembre). Il controllo filtrato sul percorso del processo non basta a diagnosticare un crash; nessun crash attribuito all'app sulla sola assenza dall'elenco.
+- [ ] Collaudo utente su iPhone: AMRAP e pausa/ripresa, audio, video e salvataggio Foto, riapertura offline con scheda/note. Avvio del processo non equivale al collaudo di questi flussi.
+- [ ] Sicurezza database: preparata migrazione 20260908090000_workout_completion_ownership.sql per vietare valutazioni su esercizi di altri clienti; regressioni SQL profili/proprietà ampliate. NON eseguite/applicate: PostgreSQL locale assente e accesso/export originale da completare.
+- [ ] Produzione: sito, GitHub e database NON aggiornati da questa installazione. Restano aperti autorizzazioni reali, concorrenza staff sui corsi, backup/ripristino, trasferimento Lovable e coordinamento fonte unica web/iOS. Non dichiarare concluso il rilascio definitivo.
+
+## Candidata del 10 settembre — verifica diretta SmartWOD
+- Riferimento: app ufficiale SmartWOD Timer 1.46.4 (802), installata dal Mac App Store e osservata direttamente. Nessuna estrazione di sorgenti, asset o elusione di funzioni a pagamento. Verificati home, configurazioni, selettori, partenza, pausa/ripresa, FOR TIME con recupero e ingresso nel costruttore MIX.
+- [x] AMRAP: durate individuali e riposi solo tra set, anche zero; aggiunta/rimozione set. Obiettivo ripetizioni facoltativo mantenuto come personalizzazione SPG, distinto dai set e dai round completati.
+- [x] EMOM: intervallo e durata complessiva distinti, ultimo intervallo eventualmente parziale, set e recuperi, Death By senza limite con conclusione esplicita.
+- [x] Tabata: 20/10 × 8 termina a **3:50**, come nell'app osservata; 3 set con 2 minuti di recupero durano **15:30**. Nessun recupero dopo l'ultimo round/set.
+- [x] FOR TIME: conteggio crescente, cap facoltativo, set/recuperi e segnale periodico. Swipe conclude solo il set corrente; tempo del set concluso e riposo conservati nel ripristino dopo pausa/riavvio.
+- [x] MIX: blocchi lavoro/riposo e quattro modalità, etichette, riordino, duplicazione, ripetizione del blocco o dell'intera sequenza; preset nominati sul dispositivo separati per account. Limite esplicito di complessità evita sequenze che bloccano l'interfaccia.
+- [x] Interazione: configurazione → schermata pronta → Play → 10 secondi di preparazione; tap sul quadrante per pausa/ripresa senza nuova preparazione; avvio fisso, selettori a scorrimento senza tastiera numerica, video dal timer e valutazione solo alla conclusione dell'intera sequenza.
+- [x] Prova browser 375×667 e 667×375: configurazione compatta, selettori, preparazione, conclusione AMRAP con callback valutazione e swipe FOR TIME verificati. Corretta discrepanza secondi/millisecondi nelle etichette dei selettori e aggiunto test.
+- [x] Persistenza: impronta configurazione indipendente dall'ordine delle proprietà; timer separato per account/esercizio; ripristino degli anticipi FOR TIME; wake lock tardivo rilasciato se il timer è già in pausa; audio muto rispettato anche durante preparazione.
+- [x] Privacy nativa: disabilitato logging dei payload del bridge Capacitor, che possono includere contenuti Preferences. Non cambia firma, identificativo o archivio dati.
+- [x] Test locali: **116 test in 18 file superati**, TypeScript superato. Comprendono timer, sessioni, coda offline, cambio account, corsi, permessi video simulati e configurazione ambiente. Non equivalgono a test SQL o collaudo hardware.
+- [ ] Non certificare parità integrale SmartWOD: raggruppamenti MIX annidati, Watch/TV e audio con app sospesa non implementati/verificati. I video reali, le interruzioni telefoniche e il blocco schermo richiedono collaudo iPhone.
+- [ ] Rilascio definitivo ancora aperto: accesso/export del database originale Lovable, verifica RLS e concorrenza staff su PostgreSQL, backup/ripristino, migrazione con recupero aggiornamenti e riallineamento del sito. Nessun database cambiato o dismesso, nessun dato o branch cancellato.
+- [ ] iPhone di Roberto non raggiungibile il 10 settembre: l'installazione dell'8 settembre NON contiene questa revisione.
+
+### Uso rapido della candidata
+- Cliente: Timer → modalità → tempi/set → AVVIA IL TIMER → Play. Toccare il quadrante per pausa/ripresa; FOR TIME e Death By terminano con lo scorrimento in basso. Nell'esercizio, al termine si apre la valutazione. Video apre la registrazione nativa con salvataggio in Foto, subordinato ai permessi.
+- Coach: Calendario → Turni e presenze; distinti confermati, da confermare e disponibilità per fissi/occasionali. Gestisci posti fissi e occasionali per le assegnazioni; le conferme del cliente restano esplicite.
+- Amministratore: la candidata non abilita il cambio database. Prima della produzione servono backup verificato, staging completo con autorizzazioni e concorrenza collaudate, passaggio coordinato web/iOS e conservazione del vecchio ambiente per ripristino. Non condividere chiavi o esportazioni in chat.

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
+import BuildIdentity from "@/components/shared/BuildIdentity";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Email non valida"),
@@ -152,6 +153,7 @@ const Login = () => {
           <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
             Non hai ancora le credenziali? Contatta la reception.
           </p>
+          <BuildIdentity />
         </main>
       </div>
     </div>

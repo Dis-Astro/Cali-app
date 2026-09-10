@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIMER_CONFIG, type WorkoutTimerConfig } from "./types";
-import { formatTimerTime, getTimerSnapshot, getTimerTotalMs } from "./timerModel";
+import { buildTimerSegments, formatTimerTime, getTimerSnapshot, getTimerTotalMs, snapshotFromSegments } from "./timerModel";
 
 const config = (overrides: Partial<WorkoutTimerConfig>): WorkoutTimerConfig => ({ ...DEFAULT_TIMER_CONFIG, ...overrides });
 
 describe("workout timer model", () => {
+  it("does not count an elapsed second before it has actually passed", () => {
+    expect(formatTimerTime(100, "elapsed")).toBe("00:00");
+    expect(formatTimerTime(999, "elapsed")).toBe("00:00");
+    expect(formatTimerTime(1000, "elapsed")).toBe("00:01");
+    expect(formatTimerTime(100)).toBe("00:01");
+  });
   it("calcola il countdown sul tempo reale trascorso", () => {
     const snapshot = getTimerSnapshot(config({ mode: "countdown", durationSeconds: 90 }), 31_000);
     expect(snapshot.mainRemainingMs).toBe(59_000);
@@ -48,10 +54,11 @@ describe("workout timer model", () => {
     expect(getTimerSnapshot(tabata, 5_000).phase).toBe("work");
     expect(getTimerSnapshot(tabata, 22_000).phase).toBe("rest");
     expect(getTimerSnapshot(tabata, 31_000).round).toBe(2);
-    // Eight complete 20s/10s cycles: include the last recovery too.
-    expect(getTimerTotalMs(tabata)).toBe(240_000);
-    expect(getTimerSnapshot(tabata, 235_000)).toMatchObject({ round: 8, phase: "rest", finished: false });
-    expect(getTimerSnapshot(tabata, 240_000).finished).toBe(true);
+    // Verified directly in SmartWOD 1.46.4: no recovery after the final round.
+    expect(getTimerTotalMs(tabata)).toBe(230_000);
+    expect(getTimerSnapshot(tabata, 229_999)).toMatchObject({ round: 8, phase: "work", finished: false });
+    expect(getTimerSnapshot(tabata, 230_000).finished).toBe(true);
+    expect(getTimerTotalMs({ ...tabata, sets: 3, setRestSeconds: 120 })).toBe(930_000);
   });
 
   it("usa un cronometro senza limite", () => {
@@ -59,5 +66,48 @@ describe("workout timer model", () => {
     expect(snapshot.totalMs).toBeNull();
     expect(snapshot.mainRemainingMs).toBe(3_661_000);
     expect(formatTimerTime(snapshot.mainRemainingMs)).toBe("01:01:01");
+  });
+
+  it("sequences independently timed AMRAP sets and only intermediate rests", () => {
+    const c = config({ mode: "amrap", amrapSets: [{ durationSeconds: 20, restSeconds: 10 }, { durationSeconds: 30, restSeconds: 120 }] });
+    expect(getTimerTotalMs(c)).toBe(60_000);
+    expect(getTimerSnapshot(c, 19_999)).toMatchObject({ set: 1, phase: "work", mainRemainingMs: 1 });
+    expect(getTimerSnapshot(c, 20_000)).toMatchObject({ set: 1, phase: "rest", mainRemainingMs: 10_000 });
+    expect(getTimerSnapshot(c, 30_000)).toMatchObject({ set: 2, phase: "work", mainRemainingMs: 30_000 });
+    expect(getTimerSnapshot(c, 60_000).finished).toBe(true);
+    expect(getTimerSnapshot({ ...c, amrapSets: c.amrapSets!.map(s => ({ ...s, restSeconds: 0 })) }, 20_000)).toMatchObject({ set: 2, phase: "work" });
+  });
+
+  it("uses EMOM total duration, including a partial last interval and repeated sets", () => {
+    const c = config({ mode: "emom", intervalSeconds: 60, emomDurationSeconds: 150, sets: 2, setRestSeconds: 10 });
+    expect(getTimerTotalMs(c)).toBe(310_000);
+    expect(getTimerSnapshot(c, 120_000)).toMatchObject({ round: 3, mainRemainingMs: 30_000 });
+    expect(getTimerSnapshot(c, 150_000).phase).toBe("rest");
+    expect(getTimerSnapshot(c, 160_000)).toMatchObject({ set: 2, round: 1, mainRemainingMs: 60_000 });
+  });
+
+  it("shortens only the FOR TIME work set when swiped, preserving rest and following sets", () => {
+    const c = config({ mode: "stopwatch", forTimeCapSeconds: 60, sets: 2, setRestSeconds: 10 });
+    const segments = buildTimerSegments(c);
+    expect(snapshotFromSegments(c, segments, 20_000, { 0: 20_000 })).toMatchObject({ phase: "rest", mainRemainingMs: 10_000, totalMs: 90_000 });
+    expect(snapshotFromSegments(c, segments, 30_000, { 0: 20_000 })).toMatchObject({ set: 2, phase: "work", mainRemainingMs: 0 });
+    expect(snapshotFromSegments(c, segments, 45_000, { 0: 20_000, 2: 15_000 })).toMatchObject({ finished: true, totalMs: 45_000 });
+    expect(getTimerSnapshot(c, 60_000)).toMatchObject({ phase: "rest" });
+  });
+
+  it("executes and repeats MIX blocks without accidental inherited sets or rests", () => {
+    const base = { id: "a", label: "Squat", durationSeconds: 10, intervalSeconds: 5, workSeconds: 2, restSeconds: 1, rounds: 2, repeats: 1 };
+    const c = config({ mode: "mix", sets: 2, mixBlocks: [{ ...base, kind: "amrap", repeats: 2 }, { ...base, id: "b", kind: "rest", durationSeconds: 3 }, { ...base, id: "c", kind: "tabata" }] });
+    expect(getTimerTotalMs(c)).toBe(56_000);
+    expect(getTimerSnapshot(c, 20_000)).toMatchObject({ phase: "rest", label: "Squat" });
+    expect(getTimerSnapshot(c, 23_000)).toMatchObject({ activeMode: "tabata", round: 1 });
+    expect(getTimerSnapshot(c, 28_000)).toMatchObject({ set: 2, activeMode: "amrap" });
+    expect(getTimerSnapshot(c, 56_000).finished).toBe(true);
+  });
+
+  it("rejects unbounded or malformed timelines before allocating intervals", () => {
+    expect(() => getTimerTotalMs(config({ mode: "emom", intervalSeconds: 0 }))).toThrow();
+    expect(() => getTimerTotalMs(config({ mode: "emom", intervalSeconds: 1, emomDurationSeconds: 10859, sets: 20 }))).toThrow();
+    expect(() => getTimerTotalMs(config({ sets: Infinity }))).toThrow();
   });
 });

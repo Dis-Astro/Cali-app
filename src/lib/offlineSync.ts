@@ -5,13 +5,16 @@ const STORAGE_VERSION = "v2";
 const QUEUE_KEY = `spg:offline:${STORAGE_VERSION}:queue`;
 const META_KEY = `spg:offline:${STORAGE_VERSION}:meta`;
 const CACHE_PREFIX = `spg:offline:${STORAGE_VERSION}:cache:`;
+const FLUSH_LOCK_KEY = `${QUEUE_KEY}:flush`;
 
 export interface OfflineSnapshot {
+  accountId: string | null;
   isOnline: boolean;
   isSyncing: boolean;
   pendingCount: number;
   lastSyncAt: string | null;
   lastError: string | null;
+  storageError: boolean;
 }
 
 export interface WorkoutCompletionPayload {
@@ -57,9 +60,10 @@ let initialized = false;
 let flushPromise: Promise<void> | null = null;
 let retryTimer: number | null = null;
 let queueMutation: Promise<unknown> = Promise.resolve();
+let accountVersion = 0;
+let queueVersion = 0;
 
-// Lock only storage transactions, never network requests. Web Locks also
-// coordinate browser tabs; the promise fallback coordinates the native runtime.
+// Separate locks let users keep editing while one tab sends the queue.
 function mutateQueue(transform: (queue: PendingOperation[]) => PendingOperation[]) {
   const transaction = async () => {
     const queue = transform(await readQueue());
@@ -76,11 +80,13 @@ function mutateQueue(transform: (queue: PendingOperation[]) => PendingOperation[
   return next;
 }
 const snapshot: OfflineSnapshot = {
+  accountId: null,
   isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   isSyncing: false,
   pendingCount: 0,
   lastSyncAt: null,
   lastError: null,
+  storageError: false,
 };
 
 function emit() {
@@ -99,26 +105,95 @@ function safeParse<T>(value: string | null, fallback: T): T {
 
 async function readQueue(): Promise<PendingOperation[]> {
   const { value } = await Preferences.get({ key: QUEUE_KEY });
-  return safeParse<PendingOperation[]>(value, []);
+  if (value === null) {
+    snapshot.storageError = false;
+    return [];
+  }
+  try {
+    const queue: unknown = JSON.parse(value);
+    if (!Array.isArray(queue) || !queue.every(isPendingOperation)) throw new Error("Invalid queue");
+    snapshot.storageError = false;
+    return queue;
+  } catch {
+    // Never replace unreadable data with an empty queue: that would discard
+    // notes at the next save. Leave the original bytes available for recovery.
+    snapshot.storageError = true;
+    snapshot.lastError = "Dati offline non leggibili: conservati sul dispositivo. Non disinstallare l'app; richiedi assistenza.";
+    emit();
+    throw new Error(snapshot.lastError);
+  }
+}
+
+function isPendingOperation(value: unknown): value is PendingOperation {
+  if (!value || typeof value !== "object") return false;
+  const operation = value as Partial<PendingOperation>;
+  if (typeof operation.id !== "string" || !operation.id || typeof operation.dedupeKey !== "string"
+    || typeof operation.createdAt !== "string" || typeof operation.updatedAt !== "string"
+    || !Number.isFinite(operation.attempts) || !operation.payload
+    || typeof operation.payload.clientId !== "string" || !operation.payload.clientId) return false;
+  if (operation.type === "workout_completion") {
+    const payload = operation.payload;
+    return typeof payload.workoutPlanExerciseId === "string" && Number.isFinite(payload.weekNumber)
+      && typeof payload.clientNotes === "string" && Number.isFinite(payload.difficultyRating)
+      && (payload.id === undefined || typeof payload.id === "string");
+  }
+  if (operation.type === "error_report") {
+    const payload = operation.payload;
+    return typeof payload.coachId === "string" && typeof payload.title === "string"
+      && typeof payload.description === "string" && typeof payload.localId === "string";
+  }
+  return false;
+}
+
+function pendingFor(queue: PendingOperation[], accountId: string | null) {
+  return accountId ? queue.filter((operation) => operation.payload.clientId === accountId).length : 0;
 }
 
 async function writeQueue(queue: PendingOperation[]) {
   await Preferences.set({ key: QUEUE_KEY, value: JSON.stringify(queue) });
-  snapshot.pendingCount = queue.length;
+  queueVersion++;
+  snapshot.pendingCount = pendingFor(queue, snapshot.accountId);
   emit();
 }
 
-async function readMeta() {
-  const { value } = await Preferences.get({ key: META_KEY });
+async function readMeta(accountId: string) {
+  const { value } = await Preferences.get({ key: `${META_KEY}:${accountId}` });
   const meta = safeParse<{ lastSyncAt: string | null }>(value, { lastSyncAt: null });
-  snapshot.lastSyncAt = meta.lastSyncAt;
+  return typeof meta?.lastSyncAt === "string" ? meta.lastSyncAt : null;
 }
 
-async function writeMeta() {
+async function writeMeta(accountId: string, lastSyncAt: string) {
   await Preferences.set({
-    key: META_KEY,
-    value: JSON.stringify({ lastSyncAt: snapshot.lastSyncAt }),
+    key: `${META_KEY}:${accountId}`,
+    value: JSON.stringify({ lastSyncAt }),
   });
+  if (snapshot.accountId === accountId) snapshot.lastSyncAt = lastSyncAt;
+}
+
+async function refreshAccountSnapshot() {
+  const version = accountVersion;
+  const accountId = snapshot.accountId;
+  const lastSyncAt = accountId ? await readMeta(accountId) : null;
+  await queueMutation;
+  const currentQueueVersion = queueVersion;
+  const queue = await readQueue();
+  if (version !== accountVersion || currentQueueVersion !== queueVersion) return;
+  snapshot.pendingCount = pendingFor(queue, accountId);
+  snapshot.lastSyncAt = lastSyncAt;
+  emit();
+}
+
+export async function setOfflineSyncAccount(accountId: string | null) {
+  if (snapshot.accountId !== accountId) {
+    accountVersion++;
+    snapshot.accountId = accountId;
+    snapshot.pendingCount = 0;
+    snapshot.lastSyncAt = null;
+    snapshot.lastError = null;
+    snapshot.isSyncing = false;
+    emit();
+  }
+  await refreshAccountSnapshot().catch(handleSyncError);
 }
 
 function workoutDedupeKey(payload: WorkoutCompletionPayload) {
@@ -131,42 +206,20 @@ function reportDedupeKey(payload: ErrorReportPayload) {
 
 async function syncWorkoutCompletion(operation: PendingWorkoutCompletion) {
   const payload = operation.payload;
-  let completionId = payload.id;
-
-  if (!completionId) {
-    const { data: existing, error: lookupError } = await supabase
-      .from("workout_completions")
-      .select("id")
-      .eq("client_id", payload.clientId)
-      .eq("workout_plan_exercise_id", payload.workoutPlanExerciseId)
-      .eq("set_number", payload.weekNumber)
-      .maybeSingle();
-
-    if (lookupError) throw lookupError;
-    completionId = existing?.id;
-  }
-
-  if (completionId) {
-    const { error } = await supabase
-      .from("workout_completions")
-      .update({
-        client_notes: payload.clientNotes,
-        difficulty_rating: payload.difficultyRating,
-      })
-      .eq("id", completionId)
-      .eq("client_id", payload.clientId);
-    if (error) throw error;
-    return;
-  }
-
-  const { error } = await supabase.from("workout_completions").insert({
+  // The tracked schema has unique_completion_per_set. A single atomic write
+  // avoids the lookup/insert race, including a retry after a lost response.
+  // Do not send id or coach fields: conflicts retain the existing row identity
+  // and change only these client-owned values. If the live constraint is
+  // missing, fail safely and retain the queue instead of inserting duplicates.
+  const { data, error } = await supabase.from("workout_completions").upsert({
     workout_plan_exercise_id: payload.workoutPlanExerciseId,
     client_id: payload.clientId,
     set_number: payload.weekNumber,
     client_notes: payload.clientNotes,
     difficulty_rating: payload.difficultyRating,
-  });
+  }, { onConflict: "workout_plan_exercise_id,client_id,set_number" }).select("id").single();
   if (error) throw error;
+  if (!data?.id) throw new Error("Salvataggio non confermato. La valutazione resta sul dispositivo.");
 }
 
 async function syncErrorReport(operation: PendingErrorReport) {
@@ -188,26 +241,40 @@ function updateOnlineState() {
 }
 
 function scheduleRetry() {
-  if (typeof window === "undefined" || retryTimer !== null) return;
+  if (typeof window === "undefined" || retryTimer !== null || snapshot.storageError) return;
   retryTimer = window.setTimeout(() => {
     retryTimer = null;
     if (navigator.onLine && snapshot.pendingCount > 0) void flushPendingOperations();
   }, 30000);
 }
 
+function handleSyncError(error: unknown) {
+  snapshot.lastError = error && typeof error === "object" && "message" in error && typeof error.message === "string"
+    ? error.message : "Sincronizzazione non riuscita";
+  emit();
+}
+
 export async function initializeOfflineSync() {
   if (initialized) return;
   initialized = true;
 
-  const queue = await readQueue();
-  snapshot.pendingCount = queue.length;
-  await readMeta();
+  // Auth callbacks must not await another Supabase auth operation (lock cycle).
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") void setOfflineSyncAccount(null);
+    if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
+      window.setTimeout(() => {
+        // A sign-in can arrive during a failed replay. Retry after it settles.
+        void (flushPromise ?? Promise.resolve()).then(() => flushPendingOperations());
+      }, 0);
+    }
+  });
+  await refreshAccountSnapshot().catch(handleSyncError);
   updateOnlineState();
 
   if (typeof window !== "undefined") {
     window.addEventListener("online", () => {
       snapshot.isOnline = true;
-      snapshot.lastError = null;
+      if (!snapshot.storageError) snapshot.lastError = null;
       emit();
       void flushPendingOperations();
     });
@@ -219,13 +286,18 @@ export async function initializeOfflineSync() {
     });
 
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && navigator.onLine && snapshot.pendingCount > 0) {
-        void flushPendingOperations();
+      if (document.visibilityState === "visible") {
+        void refreshAccountSnapshot().then(() => {
+          if (navigator.onLine && snapshot.pendingCount > 0) void flushPendingOperations();
+        }).catch(handleSyncError);
       }
+    });
+    window.addEventListener("storage", () => {
+      void refreshAccountSnapshot().catch(handleSyncError);
     });
   }
 
-  if (snapshot.isOnline && queue.length > 0) void flushPendingOperations();
+  if (snapshot.isOnline && snapshot.pendingCount > 0) void flushPendingOperations();
 }
 
 export function subscribeOfflineSync(listener: Listener) {
@@ -279,7 +351,7 @@ async function enqueue(operation: PendingOperation) {
   const remaining = await readQueue();
   return {
     synced: !remaining.some((item) => item.dedupeKey === operation.dedupeKey),
-    pendingCount: remaining.length,
+    pendingCount: pendingFor(remaining, operation.payload.clientId),
   };
 }
 
@@ -319,18 +391,31 @@ export async function flushPendingOperations() {
     return;
   }
 
-  flushPromise = (async () => {
+  const replay = async () => {
     snapshot.isOnline = true;
-    snapshot.isSyncing = true;
+    snapshot.isSyncing = Boolean(snapshot.accountId);
     snapshot.lastError = null;
     emit();
 
     while (typeof navigator === "undefined" || navigator.onLine) {
       // Never replay a previous account's operations under another session.
+      const version = accountVersion;
       const { data, error: authError } = await supabase.auth.getUser();
-      if (authError || !data.user) break;
+      if (version !== accountVersion) continue;
+      if (authError || !data.user) {
+        if (snapshot.pendingCount > 0) {
+          snapshot.lastError = "Sessione non verificabile. I dati restano salvati; riproveremo dopo l'accesso o il ritorno della rete.";
+          scheduleRetry();
+        }
+        break;
+      }
+      // A verified token must also belong to the account currently displayed.
+      // In particular, stop immediately when the UI has signed out but the
+      // underlying auth request is still settling.
+      if (data.user.id !== snapshot.accountId) break;
       await queueMutation;
       const operation = (await readQueue()).find((item) => item.payload.clientId === data.user.id);
+      if (version !== accountVersion) continue;
       if (!operation) break;
       try {
         if (operation.type === "workout_completion") await syncWorkoutCompletion(operation);
@@ -338,28 +423,35 @@ export async function flushPendingOperations() {
 
         // A newer edit has a different revision id and must survive this ack.
         await mutateQueue((queue) => queue.filter((item) => item.id !== operation.id));
+        if (pendingFor(await readQueue(), data.user.id) === 0) {
+          await writeMeta(data.user.id, new Date().toISOString());
+        }
       } catch (error) {
         operation.attempts += 1;
         operation.updatedAt = new Date().toISOString();
         await mutateQueue((queue) => queue.map((item) => (item.id === operation.id ? operation : item)));
-        snapshot.lastError = error instanceof Error ? error.message : "Sincronizzazione non riuscita";
+        if (snapshot.accountId === operation.payload.clientId) handleSyncError(error);
         scheduleRetry();
         break;
       }
     }
 
     const queue = await readQueue();
-    if (queue.length === 0) {
-      snapshot.lastSyncAt = new Date().toISOString();
+    if (pendingFor(queue, snapshot.accountId) === 0) {
       snapshot.lastError = null;
-      await writeMeta();
     }
 
     snapshot.isSyncing = false;
-    snapshot.pendingCount = queue.length;
+    snapshot.pendingCount = pendingFor(queue, snapshot.accountId);
     emit();
+  };
+  // Hold the replay lock across HTTP requests, separate from storage mutations:
+  // two tabs must not both insert the same pending completion.
+  flushPromise = (async () => {
+    if (typeof navigator !== "undefined" && navigator.locks) await navigator.locks.request(FLUSH_LOCK_KEY, replay);
+    else await replay();
   })().catch((error) => {
-    snapshot.lastError = error instanceof Error ? error.message : "Sincronizzazione non riuscita";
+    handleSyncError(error);
     scheduleRetry();
   }).finally(() => {
     snapshot.isSyncing = false;

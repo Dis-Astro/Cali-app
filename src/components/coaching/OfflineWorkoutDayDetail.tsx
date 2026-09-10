@@ -269,7 +269,7 @@ const OfflineWorkoutDayDetail = () => {
                 </CollapsibleContent>
                 <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 bg-card/80 px-3 py-2">
                   <ExerciseVideoRecorder exerciseName={exercise.exercise_name} />
-                  <WorkoutTimerLauncher exerciseName={exercise.exercise_name} exerciseNotes={exercise.notes} onComplete={() => openEvaluationAfterTimer(exercise)} />
+                  <WorkoutTimerLauncher key={`${profile?.user_id}:${exercise.id}`} sessionScope={`${profile?.user_id}:${exercise.id}`} exerciseName={exercise.exercise_name} exerciseNotes={exercise.notes} onComplete={() => openEvaluationAfterTimer(exercise)} />
                 </div>
               </Card>
             </Collapsible>

@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 
 const OfflineSyncStatus = () => {
-  const { isOnline, isSyncing, pendingCount, lastError, syncNow } = useOfflineSync();
+  const { isOnline, isSyncing, pendingCount, lastError, storageError, syncNow } = useOfflineSync();
 
-  const label = !isOnline
+  const label = storageError ? "Errore dati locali" : lastError ? "Sync da verificare" : !isOnline
     ? pendingCount > 0
       ? `Offline · ${pendingCount} da sincronizzare`
       : "Offline"
@@ -21,10 +21,11 @@ const OfflineSyncStatus = () => {
       variant="ghost"
       size="sm"
       onClick={() => void syncNow()}
-      disabled={!isOnline || isSyncing || pendingCount === 0}
+      disabled={!isOnline || isSyncing || (pendingCount === 0 && !lastError)}
       title={lastError || label}
+      aria-label={lastError ? `${label}: ${lastError}` : label}
       className={`h-8 max-w-[170px] gap-1.5 rounded-full px-2.5 text-[10px] font-semibold ${
-        !isOnline
+        !isOnline || lastError
           ? "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10"
           : pendingCount > 0
             ? "bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/15"
