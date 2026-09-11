@@ -1,6 +1,6 @@
 # Super Power Gym — checklist unica
 
-Aggiornamento: 10 settembre 2026. Non confondere codice locale, test, pubblicazione e installazione.
+Aggiornamento: 11 settembre 2026. Non confondere codice locale, test, pubblicazione e installazione.
 
 ## Inventario iniziale
 Inventario storico: per lo stato corrente leggere l'ultima sezione del registro; non ripetere le verifiche già superate senza una modifica pertinente.
@@ -121,3 +121,14 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - Cliente: Timer → modalità → tempi/set → AVVIA IL TIMER → Play. Toccare il quadrante per pausa/ripresa; FOR TIME e Death By terminano con lo scorrimento in basso. Nell'esercizio, al termine si apre la valutazione. Video apre la registrazione nativa con salvataggio in Foto, subordinato ai permessi.
 - Coach: Calendario → Turni e presenze; distinti confermati, da confermare e disponibilità per fissi/occasionali. Gestisci posti fissi e occasionali per le assegnazioni; le conferme del cliente restano esplicite.
 - Amministratore: la candidata non abilita il cambio database. Prima della produzione servono backup verificato, staging completo con autorizzazioni e concorrenza collaudate, passaggio coordinato web/iOS e conservazione del vecchio ambiente per ripristino. Non condividere chiavi o esportazioni in chat.
+
+## Database — chiusura verifiche locali dell'11 settembre
+- [x] Superato il limite tecnico precedente: predisposto PostgreSQL reale locale isolato, accessibile solo su loopback, con dati sintetici. Strumenti di test separati in `build/server-tests`, senza aggiungere dipendenze all'app. Database arrestato automaticamente al termine; nessuna connessione alla produzione.
+- [x] Nuova migrazione additiva `20260911090000_course_capacity_guards.sql`: controlli di capienza anche sulle scritture dirette staff, blocco prenotazioni concorrenti cliente/staff, limiti totale/fissi/occasionali, iscrizione, identità immutabile della prenotazione e gruppo di giorni. Non cambia API e non riscrive dati.
+- [x] Assegnazioni fisse serializzate con le modifiche alla capienza del turno; riduzioni di capienza del turno/corso rifiutate se incompatibili con posti occupati o configurati. Correzioni di presenza e rinunce conservate. Riattivazione dei turni rivalida le assegnazioni fisse.
+- [x] `scripts/test-course-database.mjs`: **11 scenari superati** su PostgreSQL 18.4. Nove scenari corsi (cinque con due connessioni e attesa del lock verificata) più esecuzione degli script SQL `profile_identity.sql` e `workout_completion_ownership.sql` prima solo preparati. Verificate auto-promozione, isolamento, valutazioni arretrate/upsert e permessi staff conservati.
+- [x] Le regressioni sicurezza usano DDL/RLS originali e le migrazioni pertinenti, con schema auth minimo; Storage, servizi Supabase e migrazioni estranee non simulati. Questo test NON è un ripristino della produzione e NON certifica le autorizzazioni oggi presenti sul server.
+- [x] Lint dello script superato; codice app invariato rispetto alla candidata `9ae58118c3f7` già verificata con 116 test e build iOS/web. Nessuna build mobile ripetuta per modifiche esclusivamente SQL/test.
+- [ ] Le tre migrazioni di sicurezza/capienza NON applicate al database reale. L'11 settembre la dashboard del progetto originale `dvjhcdmuuuwepayaatup` reindirizza al login: richiesto accesso dell'utente senza condivisione di password/chiavi. Serve poi inventario schema reale, backup/ripristino, confronto con queste migrazioni e collaudo su copia prima del passaggio.
+- [ ] iPhone di Roberto ancora `unavailable`; nessuna installazione su dispositivi di altre persone. Restano migrazione Lovable, coordinamento sito/repository, collaudo hardware e limiti SmartWOD elencati sopra.
+- Riproduzione: installare separatamente `embedded-postgres@18.4.0-beta.17` e `pg@8.16.3` con `npm install --prefix build/server-tests`; consentire lo script di installazione del pacchetto binario ufficiale della piattaforma; eseguire `node scripts/test-course-database.mjs`. Porta locale 55439, nessun URL/credenziale remoto accettato. Riferimento strumento: https://github.com/leinelissen/embedded-postgres.
