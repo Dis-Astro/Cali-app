@@ -123,6 +123,8 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - Amministratore: la candidata non abilita il cambio database. Prima della produzione servono backup verificato, staging completo con autorizzazioni e concorrenza collaudate, passaggio coordinato web/iOS e conservazione del vecchio ambiente per ripristino. Non condividere chiavi o esportazioni in chat.
 
 ## Candidata del 12 settembre — MIX e accessi verificati
+- [x] Installata sull'iPhone di Roberto il 12 settembre alle 11:01 la candidata `e4bdeb156ef9`, aggiornando `it.superpowergym.app.dev.rdisante` senza disinstallazione.
+- [ ] Avvio remoto rifiutato da iOS per sicurezza (firma/entitlements/fiducia del profilo). Firma locale valida, application-identifier corretto, profilo valido fino al 19 settembre 2026 08:55 UTC. Occorre aprire dall'icona e verificare l'eventuale richiesta di autorizzazione sviluppatore sul telefono; non attribuire ancora l'errore a un crash dell'app. Collaudo hardware non eseguito.
 - [x] MIX: gruppi ripetibili annidati, etichette e modifica ricorsiva, conservati nei preset. Limiti: 3 livelli di gruppi, 80 nodi, 5000 intervalli espansi; rifiutati gruppi vuoti, cicli e configurazioni eccessive. Test di durata, confini, persistenza e creazione nell'interfaccia.
 - [x] Verifica completa: 119 test in 18 file superati, TypeScript superato, lint 0 errori e 41 avvisi preesistenti.
 - [x] Dashboard autenticata: staging `fyrzzuswjgtwoctovker` accessibile e con tabelle presenti. L'apertura del progetto originale `dvjhcdmuuuwepayaatup` reindirizza all'organizzazione, che non lo elenca. L'accesso allo staging NON dà accesso al database della webapp. Nessuna modifica remota eseguita.
