@@ -13,6 +13,17 @@ const start = async () => { await act(async () => { fireEvent.click(screen.getBy
 afterEach(() => { cleanup(); vi.useRealTimers(); localStorage.clear(); vi.restoreAllMocks(); audio.play.mockReset().mockResolvedValue(false); });
 
 describe("SmartWOD-observed timer flows", () => {
+  it("creates a repeated MIX group, saves its children and opens the ready screen", () => {
+    render(<WorkoutTimerLauncher/>);
+    fireEvent.click(screen.getByRole("button", { name: "Apri timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "MIX" }));
+    fireEvent.click(screen.getByRole("button", { name: /Gruppo di serie/ }));
+    expect(screen.getByRole("button", { name: /AVVIA IL TIMER/ })).toHaveTextContent("03:00");
+    fireEvent.click(screen.getByRole("button", { name: /AVVIA IL TIMER/ }));
+    expect(screen.getByRole("button", { name: "Avvia" })).toBeVisible();
+    const stored = JSON.parse(localStorage.getItem("spg:timer-settings:v1:mix")!);
+    expect(stored.mixBlocks[0]).toMatchObject({ kind: "group", repeats: 3, children: [{ kind: "work", durationSeconds: 60 }] });
+  });
   it("honours mute toggled during the preparation countdown", async () => {
     vi.useFakeTimers();
     render(<WorkoutTimerScreen config={DEFAULT_TIMER_CONFIG} onClose={vi.fn()}/>);

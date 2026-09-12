@@ -14,14 +14,15 @@ function RepeatedSets({ config, onChange }: { config: WorkoutTimerConfig; onChan
     </div>;
 }
 
-function MixEditor({ config, onChange }: { config: WorkoutTimerConfig; onChange: (config: WorkoutTimerConfig) => void }) {
+function MixEditor({ config, onChange, depth = 0 }: { config: WorkoutTimerConfig; onChange: (config: WorkoutTimerConfig) => void; depth?: number }) {
   const [kind, setKind] = useState<MixBlock["kind"]>("amrap");
   const blocks = config.mixBlocks ?? [];
   const update = (index: number, patch: Partial<MixBlock>) => onChange({ ...config, mixBlocks: blocks.map((block, i) => i === index ? { ...block, ...patch } : block) });
   const add = (type: MixBlock["kind"]) => {
     if (blocks.length >= 20) return;
     onChange({ ...config, mixBlocks: [...blocks, { id: crypto.randomUUID(), label: "", kind: type, durationSeconds: type === "amrap" ? 600 : 60,
-      intervalSeconds: 60, workSeconds: 20, restSeconds: 10, rounds: 8, repeats: 1 }] });
+      intervalSeconds: 60, workSeconds: 20, restSeconds: 10, rounds: 8, repeats: type === "group" ? 3 : 1,
+      ...(type === "group" ? { children: [{ id: crypto.randomUUID(), label: "", kind: "work" as const, durationSeconds: 60, intervalSeconds: 60, workSeconds: 20, restSeconds: 10, rounds: 8, repeats: 1 }] } : {}) }] });
   };
   const move = (index: number, delta: number) => {
     const reordered = [...blocks];
@@ -30,17 +31,20 @@ function MixEditor({ config, onChange }: { config: WorkoutTimerConfig; onChange:
   };
   return <div className="space-y-3">
     {blocks.map((block, index) => <details key={block.id} className="rounded-xl border border-white/20 p-3" open={undefined}>
-      <summary className="cursor-pointer font-semibold">{index + 1}. {block.label || (block.kind === "work" ? "Lavoro" : block.kind === "rest" ? "Riposo" : TIMER_MODE_LABELS[block.kind].title)} {block.repeats > 1 && `× ${block.repeats}`}</summary>
+      <summary className="cursor-pointer font-semibold">{index + 1}. {block.label || (block.kind === "group" ? "Gruppo di serie" : block.kind === "work" ? "Lavoro" : block.kind === "rest" ? "Riposo" : TIMER_MODE_LABELS[block.kind].title)} {block.repeats > 1 && `× ${block.repeats}`}</summary>
       <label className="mt-3 block text-xs">Nome blocco<input className="mt-1 h-11 w-full rounded-lg bg-white/10 px-3 text-base" maxLength={80} value={block.label} onChange={(e) => update(index, { label: e.target.value })}/></label>
       <div className="mt-2 grid grid-cols-2 gap-2">
         {block.kind === "tabata" ? <>
           <WheelField label="Serie" kind="count" max={50} value={block.rounds} onChange={(rounds) => update(index, { rounds })}/>
           <WheelField label="Lavoro" max={30} value={block.workSeconds} onChange={(workSeconds) => update(index, { workSeconds })}/>
           <WheelField label="Riposo" max={30} value={block.restSeconds} allowZero onChange={(restSeconds) => update(index, { restSeconds })}/>
-        </> : <WheelField label={block.kind === "stopwatch" ? "Tempo massimo" : "Durata"} value={block.durationSeconds} onChange={(durationSeconds) => update(index, { durationSeconds })}/>}
+        </> : block.kind !== "group" && <WheelField label={block.kind === "stopwatch" ? "Tempo massimo" : "Durata"} value={block.durationSeconds} onChange={(durationSeconds) => update(index, { durationSeconds })}/>}
         {block.kind === "emom" && <WheelField label="Ogni" value={block.intervalSeconds} max={30} onChange={(intervalSeconds) => update(index, { intervalSeconds })}/>}
         <WheelField label="Ripeti blocco" kind="count" max={10} value={block.repeats} onChange={(repeats) => update(index, { repeats })}/>
       </div>
+      {block.kind === "group" && <div className="mt-3 border-l border-white/20 pl-2" aria-label="Contenuto gruppo">
+        <MixEditor depth={depth + 1} config={{ ...config, sets: 1, mixBlocks: block.children ?? [] }} onChange={(child) => update(index, { children: child.mixBlocks })}/>
+      </div>}
       <div className="mt-3 flex justify-end gap-3">
         <button aria-label={`Sposta su blocco ${index + 1}`} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp/></button>
         <button aria-label={`Sposta giù blocco ${index + 1}`} disabled={index === blocks.length - 1} onClick={() => move(index, 1)}><ArrowDown/></button>
@@ -55,8 +59,9 @@ function MixEditor({ config, onChange }: { config: WorkoutTimerConfig; onChange:
       <button className="timer-add" disabled={blocks.length >= 20} onClick={() => add(kind)}>＋ Tipo di workout</button>
       <button className="timer-add" disabled={blocks.length >= 20} onClick={() => add("work")}>＋ Lavoro</button>
       <button className="timer-add" disabled={blocks.length >= 20} onClick={() => add("rest")}>＋ Riposo</button>
+      {depth < 3 && <button className="timer-add col-span-2" disabled={blocks.length >= 20} onClick={() => add("group")}>＋ Gruppo di serie</button>}
     </div>
-    <WheelField label="Ripeti sequenza" kind="count" max={20} value={config.sets ?? 1} onChange={(sets) => onChange({ ...config, sets })}/>
+    {depth === 0 && <WheelField label="Ripeti sequenza" kind="count" max={20} value={config.sets ?? 1} onChange={(sets) => onChange({ ...config, sets })}/>}
   </div>;
 }
 

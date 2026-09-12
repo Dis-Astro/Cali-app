@@ -220,7 +220,7 @@ export default function WorkoutTimerLauncher({ exerciseName, exerciseNotes, onCo
   const presetKey = `spg:timer-presets:v1:${sessionScope.split(":")[0]}`;
   const validation = useMemo(() => {
     try { return { total: getTimerTotalMs(config), error: "" }; }
-    catch { return { total: null, error: "Configurazione troppo estesa: riduci durata, intervalli o ripetizioni." }; }
+    catch { return { total: null, error: "Completa i gruppi vuoti e rispetta i limiti: 3 livelli, 80 blocchi e 5000 intervalli. Se necessario riduci le ripetizioni." }; }
   }, [config]);
   const total = validation.total;
   const openPresets = () => {

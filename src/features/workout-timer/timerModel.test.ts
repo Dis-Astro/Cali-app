@@ -5,6 +5,17 @@ import { buildTimerSegments, formatTimerTime, getTimerSnapshot, getTimerTotalMs,
 const config = (overrides: Partial<WorkoutTimerConfig>): WorkoutTimerConfig => ({ ...DEFAULT_TIMER_CONFIG, ...overrides });
 
 describe("workout timer model", () => {
+  it("repeats nested MIX groups in order, without inserting implicit recoveries", () => {
+    const leaf = { id: "leaf", label: "Squat", kind: "work" as const, durationSeconds: 2, intervalSeconds: 60, workSeconds: 20, restSeconds: 10, rounds: 8, repeats: 1 };
+    const inner = { ...leaf, id: "inner", kind: "group" as const, label: "Interno", repeats: 2, children: [leaf, { ...leaf, id: "rest", kind: "rest" as const, durationSeconds: 1 }] };
+    const c = config({ mode: "mix", sets: 2, mixBlocks: [{ ...inner, id: "outer", label: "Esterno", repeats: 3, children: [inner] }] });
+    expect(getTimerTotalMs(c)).toBe(36_000);
+    expect(getTimerSnapshot(c, 2_000)).toMatchObject({ phase: "rest", label: "Esterno 1/3 · Interno 1/2 · Squat" });
+    expect(getTimerSnapshot(c, 3_000)).toMatchObject({ phase: "work", label: "Esterno 1/3 · Interno 2/2 · Squat" });
+    expect(getTimerSnapshot(c, 6_000).label).toBe("Esterno 2/3 · Interno 1/2 · Squat");
+    expect(getTimerSnapshot(c, 18_000)).toMatchObject({ set: 2, phase: "work" });
+    expect(getTimerSnapshot(c, 36_000).finished).toBe(true);
+  });
   it("does not count an elapsed second before it has actually passed", () => {
     expect(formatTimerTime(100, "elapsed")).toBe("00:00");
     expect(formatTimerTime(999, "elapsed")).toBe("00:00");

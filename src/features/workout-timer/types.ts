@@ -4,7 +4,8 @@ export interface AmrapSet { durationSeconds: number; restSeconds: number }
 export interface MixBlock {
   id: string;
   label: string;
-  kind: "work" | "rest" | "amrap" | "stopwatch" | "emom" | "tabata";
+  kind: "work" | "rest" | "amrap" | "stopwatch" | "emom" | "tabata" | "group";
+  children?: MixBlock[];
   durationSeconds: number;
   intervalSeconds: number;
   workSeconds: number;

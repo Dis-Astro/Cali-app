@@ -122,6 +122,14 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - Coach: Calendario → Turni e presenze; distinti confermati, da confermare e disponibilità per fissi/occasionali. Gestisci posti fissi e occasionali per le assegnazioni; le conferme del cliente restano esplicite.
 - Amministratore: la candidata non abilita il cambio database. Prima della produzione servono backup verificato, staging completo con autorizzazioni e concorrenza collaudate, passaggio coordinato web/iOS e conservazione del vecchio ambiente per ripristino. Non condividere chiavi o esportazioni in chat.
 
+## Candidata del 12 settembre — MIX e accessi verificati
+- [x] MIX: gruppi ripetibili annidati, etichette e modifica ricorsiva, conservati nei preset. Limiti: 3 livelli di gruppi, 80 nodi, 5000 intervalli espansi; rifiutati gruppi vuoti, cicli e configurazioni eccessive. Test di durata, confini, persistenza e creazione nell'interfaccia.
+- [x] Verifica completa: 119 test in 18 file superati, TypeScript superato, lint 0 errori e 41 avvisi preesistenti.
+- [x] Dashboard autenticata: staging `fyrzzuswjgtwoctovker` accessibile e con tabelle presenti. L'apertura del progetto originale `dvjhcdmuuuwepayaatup` reindirizza all'organizzazione, che non lo elenca. L'accesso allo staging NON dà accesso al database della webapp. Nessuna modifica remota eseguita.
+- [ ] Servono accesso/export autorizzato del progetto originale Lovable, backup con ripristino provato, confronto dello schema e passaggio coordinato del sito e dell'app. Non dismettere il vecchio progetto prima di questi controlli.
+- [ ] iPhone di Roberto non raggiungibile al controllo del 12 settembre. Audio durante sospensione/blocco schermo, video e interruzioni ancora da collaudare; parità integrale SmartWOD NON certificata. Watch/TV non sono requisiti del rilascio iPhone.
+- [ ] Anteprima browser di questa revisione non verificata visivamente: server locale risponde HTTP 200, ma la scheda integrata resta sulla pagina di connessione rifiutata. I test dei componenti sono passati; non sostituiscono la verifica visiva.
+
 ## Database — chiusura verifiche locali dell'11 settembre
 - [x] Superato il limite tecnico precedente: predisposto PostgreSQL reale locale isolato, accessibile solo su loopback, con dati sintetici. Strumenti di test separati in `build/server-tests`, senza aggiungere dipendenze all'app. Database arrestato automaticamente al termine; nessuna connessione alla produzione.
 - [x] Nuova migrazione additiva `20260911090000_course_capacity_guards.sql`: controlli di capienza anche sulle scritture dirette staff, blocco prenotazioni concorrenti cliente/staff, limiti totale/fissi/occasionali, iscrizione, identità immutabile della prenotazione e gruppo di giorni. Non cambia API e non riscrive dati.

@@ -27,7 +27,11 @@ export function buildTimerSegments(config: WorkoutTimerConfig): TimerSegment[] {
     for (let set = 1; set <= sets; set++) {
       for (const block of config.mixBlocks ?? []) {
         for (let repeat = 0; repeat < block.repeats; repeat++) {
-          if (block.kind === "work" || block.kind === "rest") {
+          if (block.kind === "group") {
+            const child = buildTimerSegments({ ...config, sets: 1, mixBlocks: block.children });
+            result.push(...child.map(segment => ({ ...segment, set, totalSets: sets,
+              label: `${block.label || "Serie"} ${repeat + 1}/${block.repeats}${segment.label ? ` · ${segment.label}` : ""}` })));
+          } else if (block.kind === "work" || block.kind === "rest") {
             add(positive(block.durationSeconds), block.kind, "countdown", set, sets, 1, null, block.label);
           } else {
             const child = buildTimerSegments({ ...config, ...block, mode: block.kind, sets: 1, amrapSets: undefined,
