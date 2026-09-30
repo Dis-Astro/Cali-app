@@ -122,6 +122,13 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - Coach: Calendario → Turni e presenze; distinti confermati, da confermare e disponibilità per fissi/occasionali. Gestisci posti fissi e occasionali per le assegnazioni; le conferme del cliente restano esplicite.
 - Amministratore: la candidata non abilita il cambio database. Prima della produzione servono backup verificato, staging completo con autorizzazioni e concorrenza collaudate, passaggio coordinato web/iOS e conservazione del vecchio ambiente per ripristino. Non condividere chiavi o esportazioni in chat.
 
+## Candidata del 30 settembre — rilascio senza timer e fotocamera
+- [x] Rimossi accessi al timer e registrazione video dalla scheda; rimossi menu e percorsi della gestione audio timer per coach/admin. Rimossi gli avvisi di accesso Fotocamera/Microfono/Foto dal pacchetto iOS. Sorgenti storici conservati per eventuali aggiornamenti, esclusi dal grafo di import della webapp; nessuna cancellazione di dati o video esistenti.
+- [x] Corretto smontaggio delle pagine durante rinnovo sessione dello stesso account: il profilo resta disponibile; cambio account e logout continuano a cancellare il profilo corrente. Test verifica che la schermata resti montata durante TOKEN_REFRESHED.
+- [x] Ripristino dell'ultima pagina al riavvio nativo/login, separato per account. Conservati giorno, planId dell'archivio, esercizi aperti e scorrimento. Destinazioni locali validate, link esterni/login e percorsi timer rifiutati, parametri di autenticazione non memorizzati. Errori di archivio locale non impediscono l'uso dell'app.
+- [x] 122 test in 19 file superati; TypeScript superato, lint 0 errori e 41 avvisi preesistenti. Nessuna modifica del database; restano i blocchi di migrazione e pubblicazione del sito già documentati.
+- [ ] Build/installazione e collaudo riavvio su iPhone da annotare dopo la verifica. Questa candidata non certifica assenza di ogni bug del progetto.
+
 ## Candidata del 12 settembre — MIX e accessi verificati
 - [x] Installata sull'iPhone di Roberto il 12 settembre alle 11:01 la candidata `e4bdeb156ef9`, aggiornando `it.superpowergym.app.dev.rdisante` senza disinstallazione.
 - [ ] Avvio remoto rifiutato da iOS per sicurezza (firma/entitlements/fiducia del profilo). Firma locale valida, application-identifier corretto, profilo valido fino al 19 settembre 2026 08:55 UTC. Occorre aprire dall'icona e verificare l'eventuale richiesta di autorizzazione sviluppatore sul telefono; non attribuire ancora l'errore a un crash dell'app. Collaudo hardware non eseguito.

@@ -34,7 +34,6 @@ const navigationItems = [
   { icon: BookOpen, label: "Corsi", href: "/admin/corsi" },
   { icon: Clock, label: "Orari Palestra", href: "/admin/orari" },
   { icon: MessageSquare, label: "Feedback Clienti", href: "/admin/segnalazioni" },
-  { icon: Mic, label: "Audio Timer", href: "/admin/audio-timer" },
   { icon: Receipt, label: "Spese", href: "/admin/spese" },
   { icon: TrendingUp, label: "Andamento", href: "/admin/andamento-struttura" },
 ];

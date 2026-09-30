@@ -55,7 +55,6 @@ const CoachDashboard = () => {
     { icon: Dumbbell, label: "Schede Allenamento", href: "/coach/schede" },
     { icon: Calendar, label: "Calendario", href: "/coach/calendario" },
     { icon: MessageSquare, label: "Feedback Clienti", href: "/coach/segnalazioni" },
-    { icon: Mic, label: "Audio Timer", href: "/coach/audio-timer" },
   ];
 
   useEffect(() => {

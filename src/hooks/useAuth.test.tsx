@@ -1,4 +1,5 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "./useAuth";
 
@@ -42,6 +43,17 @@ describe("authentication identity races", () => {
     mocks.profile.mockResolvedValue({ data: profile("a"), error: null });
   });
   afterEach(cleanup);
+
+  it("keeps the open screen mounted when the same session is refreshed", async () => {
+    const unmount = vi.fn();
+    function Screen() { useEffect(() => () => unmount(), []); return <span>Open workout</span>; }
+    function Protected() { const auth = useAuth(); return auth.profile ? <Screen /> : null; }
+    render(<AuthProvider><Consumer /><Protected /></AuthProvider>);
+    await waitFor(() => expect(current.profile?.user_id).toBe("a"));
+    act(() => { mocks.listener?.("TOKEN_REFRESHED", session("a")); });
+    await waitFor(() => expect(mocks.profile).toHaveBeenCalledTimes(2));
+    expect(unmount).not.toHaveBeenCalled();
+  });
 
   it("does not restore a profile response that arrives after logout", async () => {
     let release!: (value: unknown) => void;

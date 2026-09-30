@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
 import BuildIdentity from "@/components/shared/BuildIdentity";
+import { readNavigation } from "@/lib/navigationMemory";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Email non valida"),
@@ -17,7 +18,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 const Login = () => {
   const navigate = useNavigate();
-  const { signIn, isAuthenticated, loading: authLoading } = useAuth();
+  const { signIn, isAuthenticated, profile, loading: authLoading } = useAuth();
   const [formData, setFormData] = useState<LoginFormData>({ email: "", password: "" });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [authError, setAuthError] = useState<string | null>(null);
@@ -25,8 +26,8 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated && !authLoading) navigate("/dashboard", { replace: true });
-  }, [isAuthenticated, authLoading, navigate]);
+    if (isAuthenticated && !authLoading && profile) navigate(readNavigation(profile.user_id)?.path ?? "/dashboard", { replace: true });
+  }, [isAuthenticated, authLoading, profile, navigate]);
 
   if (authLoading) return null;
 
@@ -61,7 +62,7 @@ const Login = () => {
       return;
     }
 
-    navigate("/dashboard", { replace: true });
+    // The authenticated effect resumes the page once the profile is resolved.
   };
 
   return (

@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import NavigationMemory from "@/components/NavigationMemory";
+import { readNavigation } from "@/lib/navigationMemory";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const Index = lazy(() => import("./pages/Index"));
@@ -28,7 +30,6 @@ const MembershipPlanManagement = lazy(() => import("./pages/admin/MembershipPlan
 const AdminReportsPage = lazy(() => import("./pages/admin/AdminReportsPage"));
 const StructurePerformancePage = lazy(() => import("./pages/admin/StructurePerformancePage"));
 const ExpensesManagement = lazy(() => import("./pages/admin/ExpensesManagement"));
-const TimerAudioManagement = lazy(() => import("./pages/shared/TimerAudioManagement"));
 
 const CoachDashboard = lazy(() => import("./pages/coach/CoachDashboard"));
 const CoachClientsPage = lazy(() => import("./pages/coach/CoachClientsPage"));
@@ -48,10 +49,10 @@ const ReportProblemPage = lazy(() => import("./pages/cliente/ReportProblemPage")
 const queryClient = new QueryClient();
 
 const AppEntry = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, profile } = useAuth();
   if (!Capacitor.isNativePlatform()) return <Index />;
   if (loading) return <div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">Caricamento…</div>;
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+  return <Navigate to={isAuthenticated ? (readNavigation(profile?.user_id)?.path ?? "/dashboard") : "/login"} replace />;
 };
 
 const App = () => (
@@ -61,6 +62,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <NavigationMemory />
           <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">Caricamento…</div>}>
             <Routes>
             <Route path="/" element={<AppEntry />} />
@@ -83,14 +85,12 @@ const App = () => (
             <Route path="/admin/segnalazioni" element={<ProtectedRoute allowedRoles={["admin"]}><AdminReportsPage /></ProtectedRoute>} />
             <Route path="/admin/andamento-struttura" element={<ProtectedRoute allowedRoles={["admin"]}><StructurePerformancePage /></ProtectedRoute>} />
             <Route path="/admin/spese" element={<ProtectedRoute allowedRoles={["admin"]}><ExpensesManagement /></ProtectedRoute>} />
-            <Route path="/admin/audio-timer" element={<ProtectedRoute allowedRoles={["admin"]}><TimerAudioManagement /></ProtectedRoute>} />
 
             <Route path="/coach" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachDashboard /></ProtectedRoute>} />
             <Route path="/coach/clienti" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachClientsPage /></ProtectedRoute>} />
             <Route path="/coach/schede" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachWorkoutsPage /></ProtectedRoute>} />
             <Route path="/coach/calendario" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachCalendarPage /></ProtectedRoute>} />
             <Route path="/coach/segnalazioni" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachReportsPage /></ProtectedRoute>} />
-            <Route path="/coach/audio-timer" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><TimerAudioManagement /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={["coach", "admin"]}><CoachDashboard /></ProtectedRoute>} />
 
             <Route path="/palestra" element={<ProtectedRoute allowedRoles={["cliente_palestra", "cliente_corso"]}><PalestraDashboard /></ProtectedRoute>} />

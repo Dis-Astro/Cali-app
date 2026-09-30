@@ -118,7 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const applySession = async (nextSession: Session | null, allowOfflineFallback = true) => {
       if (!mounted) return;
       const version = ++identityVersion.current;
-      setProfile(null);
+      setProfile((current) => current?.user_id === nextSession?.user.id ? current : null);
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 

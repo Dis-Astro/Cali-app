@@ -23,8 +23,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import LightningRating from "./LightningRating";
-import WorkoutTimerLauncher from "@/features/workout-timer/WorkoutTimerLauncher";
-import ExerciseVideoRecorder from "./ExerciseVideoRecorder";
 import { ColoredKeywordText } from "@/components/shared/ColoredKeywordText";
 
 const OfflineWorkoutDayDetail = () => {
@@ -48,6 +46,7 @@ const OfflineWorkoutDayDetail = () => {
   );
 
   const backLink = requestedPlanId ? `/coaching/scheda?planId=${requestedPlanId}` : "/coaching/scheda";
+  const expandedKey = `spg:expanded-exercises:${cacheKey}`;
 
   useEffect(() => {
     if (profile?.user_id) void loadDay();
@@ -89,7 +88,10 @@ const OfflineWorkoutDayDetail = () => {
 
   const loadDay = async () => {
     setLoading(true);
-    setOpenExercises(new Set());
+    try {
+      const saved = JSON.parse(localStorage.getItem(expandedKey) || "[]");
+      setOpenExercises(new Set(Array.isArray(saved) ? saved.filter((id) => typeof id === "string").slice(0, 300) : []));
+    } catch { setOpenExercises(new Set()); }
 
     const cached = await getOfflineCache<CachedDay>(cacheKey);
     if (cached) await applySnapshot(cached.value, true);
@@ -181,22 +183,6 @@ const OfflineWorkoutDayDetail = () => {
     }
   };
 
-  const openEvaluationAfterTimer = (exercise: Exercise) => {
-    const availableWeeks = exercise.weekCompletions.filter((week) => week.week_number <= currentWeek);
-    const targetWeek = availableWeeks.find((week) => week.week_number === currentWeek && !week.saved)
-      || [...availableWeeks].reverse().find((week) => !week.saved)
-      || availableWeeks.find((week) => week.week_number === currentWeek)
-      || availableWeeks[availableWeeks.length - 1];
-
-    setOpenExercises((previous) => new Set(previous).add(exercise.id));
-    if (!targetWeek) return;
-    window.setTimeout(() => {
-      document.getElementById(`evaluation-${exercise.id}-${targetWeek.week_number}`)?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 180);
-  };
 
   if (loading && !plan) {
     return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -227,6 +213,7 @@ const OfflineWorkoutDayDetail = () => {
             <Collapsible key={exercise.id} open={isOpen} onOpenChange={() => setOpenExercises((previous) => {
               const next = new Set(previous);
               if (next.has(exercise.id)) next.delete(exercise.id); else next.add(exercise.id);
+              try { localStorage.setItem(expandedKey, JSON.stringify([...next])); } catch { /* Keep the screen usable without storage. */ }
               return next;
             })}>
               <Card className="overflow-hidden rounded-2xl">
@@ -268,8 +255,6 @@ const OfflineWorkoutDayDetail = () => {
                   </CardContent>
                 </CollapsibleContent>
                 <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 bg-card/80 px-3 py-2">
-                  <ExerciseVideoRecorder exerciseName={exercise.exercise_name} />
-                  <WorkoutTimerLauncher key={`${profile?.user_id}:${exercise.id}`} sessionScope={`${profile?.user_id}:${exercise.id}`} exerciseName={exercise.exercise_name} exerciseNotes={exercise.notes} onComplete={() => openEvaluationAfterTimer(exercise)} />
                 </div>
               </Card>
             </Collapsible>
