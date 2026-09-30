@@ -127,7 +127,10 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - [x] Corretto smontaggio delle pagine durante rinnovo sessione dello stesso account: il profilo resta disponibile; cambio account e logout continuano a cancellare il profilo corrente. Test verifica che la schermata resti montata durante TOKEN_REFRESHED.
 - [x] Ripristino dell'ultima pagina al riavvio nativo/login, separato per account. Conservati giorno, planId dell'archivio, esercizi aperti e scorrimento. Destinazioni locali validate, link esterni/login e percorsi timer rifiutati, parametri di autenticazione non memorizzati. Errori di archivio locale non impediscono l'uso dell'app.
 - [x] 122 test in 19 file superati; TypeScript superato, lint 0 errori e 41 avvisi preesistenti. Nessuna modifica del database; restano i blocchi di migrazione e pubblicazione del sito già documentati.
-- [ ] Build/installazione e collaudo riavvio su iPhone da annotare dopo la verifica. Questa candidata non certifica assenza di ogni bug del progetto.
+- [x] Candidata `0cb197ff7eea`: build web, simulatore e iPhone firmata riuscite, firma locale verificata. Asset di produzione verificati privi di schermata timer, registrazione video e gestione audio timer. Codice pubblicato sul ramo di consolidamento.
+- [x] Installata sulla stessa app dell'iPhone di Roberto il 30 settembre alle 17:19 circa, senza disinstallazione. Installazione riuscita dopo un primo errore di collegamento; nessun dispositivo estraneo utilizzato.
+- [x] Verifica visiva simulatore: scheda giorno 2, esercizio aperto, valutazioni accessibili e assenza di timer/video. Terminazione completa e riavvio ritrovano giorno 2 e lo stesso esercizio aperto, sessione mantenuta. Nessuna valutazione modificata dal collaudo.
+- [ ] Ripristino scorrimento su hardware/rete lenta e passaggio account su hardware restano da collaudare; pubblicazione del sito e trasferimento database restano separati. Questa candidata non certifica assenza di ogni bug del progetto.
 
 ## Candidata del 12 settembre — MIX e accessi verificati
 - [x] Installata sull'iPhone di Roberto il 12 settembre alle 11:01 la candidata `e4bdeb156ef9`, aggiornando `it.superpowergym.app.dev.rdisante` senza disinstallazione.
