@@ -122,6 +122,12 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 - Coach: Calendario → Turni e presenze; distinti confermati, da confermare e disponibilità per fissi/occasionali. Gestisci posti fissi e occasionali per le assegnazioni; le conferme del cliente restano esplicite.
 - Amministratore: la candidata non abilita il cambio database. Prima della produzione servono backup verificato, staging completo con autorizzazioni e concorrenza collaudate, passaggio coordinato web/iOS e conservazione del vecchio ambiente per ripristino. Non condividere chiavi o esportazioni in chat.
 
+## Settimana scelta — 3 ottobre
+- [x] Selettore numerato delle settimane per la scheda. Automatica segue il calendario; scelta manuale resta fissata alla settimana desiderata, mostrando solo le sue valutazioni. Settimane future non compilabili. Scelta conservata nel percorso, al ritorno all'elenco giorni, al cambio giorno e nella memoria di riapertura per account.
+- [x] Test del passaggio calendario 3 → 4 mantenendo manualmente 3; ritorno ad Automatica; selezioni non valide; salvataggio di una nota alla settimana 3 e conservazione delle bozze cambiando settimana. 125 test in 21 file superati e TypeScript superato.
+- [ ] Punti di rilascio ancora aperti: push server e conferma dal relativo avviso; accesso/export Lovable con backup/ripristino e migrazioni reali di sicurezza/capienza; riallineamento del sito; distribuzione TestFlight e collaudo reale offline/cambio account/prenotazioni. Timer e registrazione video esclusi dalla candidata per richiesta utente.
+- [ ] iPhone non disponibile al controllo del 3 ottobre; aggiornamento del selettore ancora da installare sul telefono.
+
 ## Candidata del 30 settembre — rilascio senza timer e fotocamera
 - [x] Rimossi accessi al timer e registrazione video dalla scheda; rimossi menu e percorsi della gestione audio timer per coach/admin. Rimossi gli avvisi di accesso Fotocamera/Microfono/Foto dal pacchetto iOS. Sorgenti storici conservati per eventuali aggiornamenti, esclusi dal grafo di import della webapp; nessuna cancellazione di dati o video esistenti.
 - [x] Corretto smontaggio delle pagine durante rinnovo sessione dello stesso account: il profilo resta disponibile; cambio account e logout continuano a cancellare il profilo corrente. Test verifica che la schermata resti montata durante TOKEN_REFRESHED.

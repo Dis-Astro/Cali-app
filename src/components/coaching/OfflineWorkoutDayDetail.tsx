@@ -24,10 +24,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Textarea } from "@/components/ui/textarea";
 import LightningRating from "./LightningRating";
 import { ColoredKeywordText } from "@/components/shared/ColoredKeywordText";
+import WorkoutWeekSelector from "./WorkoutWeekSelector";
+import { selectedWorkoutWeek } from "@/lib/workoutWeekSelection";
 
 const OfflineWorkoutDayDetail = () => {
   const { dayId } = useParams<{ dayId: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedPlanId = searchParams.get("planId");
   const { profile } = useAuth();
   const dayNumber = Number.parseInt(dayId || "1", 10);
@@ -39,13 +41,28 @@ const OfflineWorkoutDayDetail = () => {
   const [totalWeeks, setTotalWeeks] = useState(1);
   const [openExercises, setOpenExercises] = useState<Set<string>>(new Set());
   const [loadedFromCache, setLoadedFromCache] = useState(false);
+  const requestedWeek = searchParams.get("week");
+  const selectedWeek = selectedWorkoutWeek(requestedWeek, currentWeek, totalWeeks);
+  const automaticWeek = !requestedWeek || selectedWeek !== Number(requestedWeek);
+
+  useEffect(() => {
+    if (!plan) return;
+    const update = () => setCurrentWeek(Math.min(calculateCurrentWeek(plan.start_date, plan.end_date), totalWeeks));
+    update();
+    const interval = window.setInterval(update, 60_000);
+    document.addEventListener("visibilitychange", update);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", update); };
+  }, [plan, totalWeeks]);
 
   const cacheKey = useMemo(
     () => workoutDayCacheKey(profile?.user_id || "anon", dayNumber, requestedPlanId),
     [profile?.user_id, requestedPlanId, dayNumber],
   );
 
-  const backLink = requestedPlanId ? `/coaching/scheda?planId=${requestedPlanId}` : "/coaching/scheda";
+  const backParams = new URLSearchParams();
+  if (requestedPlanId) backParams.set("planId", requestedPlanId);
+  if (!automaticWeek) backParams.set("week", String(selectedWeek));
+  const backLink = `/coaching/scheda${backParams.size ? `?${backParams}` : ""}`;
   const expandedKey = `spg:expanded-exercises:${cacheKey}`;
 
   useEffect(() => {
@@ -194,18 +211,25 @@ const OfflineWorkoutDayDetail = () => {
         <Link to={backLink}><Button variant="ghost" size="icon" className="rounded-xl"><ArrowLeft className="h-5 w-5" /></Button></Link>
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-3xl tracking-wide">GIORNO {dayNumber}</h1>
-          <p className="truncate text-sm text-muted-foreground">{plan?.name} · Settimana {currentWeek} di {totalWeeks}</p>
+          <p className="truncate text-sm text-muted-foreground">{plan?.name} · Settimana {selectedWeek} di {totalWeeks}</p>
         </div>
         {loadedFromCache && <Badge variant="outline">Cache offline</Badge>}
       </div>
+
+      {plan && <WorkoutWeekSelector currentWeek={currentWeek} totalWeeks={totalWeeks} selectedWeek={selectedWeek} automatic={automaticWeek} onSelect={(week) => {
+        setSearchParams((previous) => {
+          const next = new URLSearchParams(previous);
+          if (week === null) next.delete("week"); else next.set("week", String(week));
+          return next;
+        }, { replace: true });
+      }} />}
 
       <div className="space-y-3">
         {exercises.map((exercise, index) => {
           const isOpen = openExercises.has(exercise.id);
           const completed = exercise.weekCompletions.filter((week) => week.saved).length;
           const availableWeeks = exercise.weekCompletions
-            .filter((week) => week.week_number <= currentWeek)
-            .sort((first, second) => second.week_number - first.week_number);
+            .filter((week) => week.week_number === selectedWeek);
           const missingPastWeeks = exercise.weekCompletions.filter(
             (week) => week.week_number < currentWeek && !week.saved,
           ).length;
@@ -254,8 +278,6 @@ const OfflineWorkoutDayDetail = () => {
                     )}
                   </CardContent>
                 </CollapsibleContent>
-                <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 bg-card/80 px-3 py-2">
-                </div>
               </Card>
             </Collapsible>
           );

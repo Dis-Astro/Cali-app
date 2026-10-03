@@ -4,7 +4,11 @@ export function safeResumePath(path: unknown): string | null {
   const url = new URL(path, "https://local.invalid");
   if (url.origin !== "https://local.invalid" || url.pathname.includes("audio-timer")) return null;
   const planId = url.searchParams.get("planId");
-  return url.pathname + (planId && /^[a-zA-Z0-9-]{1,80}$/.test(planId) ? `?planId=${planId}` : "");
+  const params = new URLSearchParams();
+  if (planId && /^[a-zA-Z0-9-]{1,80}$/.test(planId)) params.set("planId", planId);
+  const week = url.searchParams.get("week");
+  if (week && /^\d{1,3}$/.test(week) && Number(week) > 0) params.set("week", week);
+  return url.pathname + (params.size ? `?${params}` : "");
 }
 export function readNavigation(userId: string | undefined): { path: string; scroll: number } | null {
   if (!userId) return null;

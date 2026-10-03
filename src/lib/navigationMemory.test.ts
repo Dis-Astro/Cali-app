@@ -3,8 +3,8 @@ import { readNavigation, saveNavigation, safeResumePath } from "./navigationMemo
 describe("resume navigation", () => {
   beforeEach(() => localStorage.clear());
   it("restores the workout day and archive query for its owner only", () => {
-    saveNavigation("a", "/coaching/scheda/2?planId=plan-1", 430);
-    expect(readNavigation("a")).toEqual({ path: "/coaching/scheda/2?planId=plan-1", scroll: 430 });
+    saveNavigation("a", "/coaching/scheda/2?planId=plan-1&week=3", 430);
+    expect(readNavigation("a")).toEqual({ path: "/coaching/scheda/2?planId=plan-1&week=3", scroll: 430 });
     expect(readNavigation("b")).toBeNull();
   });
   it("rejects external, authentication and removed timer routes and strips secrets", () => {

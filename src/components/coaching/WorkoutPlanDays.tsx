@@ -88,7 +88,11 @@ const WorkoutPlanDays = () => {
 
   const status = activePlan.status || "attiva";
   const expired = isPast(new Date(activePlan.end_date));
-  const query = requestedPlanId ? `?planId=${requestedPlanId}` : "";
+  const dayParams = new URLSearchParams();
+  if (requestedPlanId) dayParams.set("planId", requestedPlanId);
+  const week = searchParams.get("week");
+  if (week && /^\d{1,3}$/.test(week)) dayParams.set("week", week);
+  const query = dayParams.size ? `?${dayParams}` : "";
   const hasDetails = Boolean(activePlan.description || activePlan.coach_notes);
 
   return (
