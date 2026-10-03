@@ -125,6 +125,7 @@ Riferimento funzionale studiato: https://smartwod.app/ e https://smartwod.app/cu
 ## Settimana scelta — 3 ottobre
 - [x] Selettore numerato delle settimane per la scheda. Automatica segue il calendario; scelta manuale resta fissata alla settimana desiderata, mostrando solo le sue valutazioni. Settimane future non compilabili. Scelta conservata nel percorso, al ritorno all'elenco giorni, al cambio giorno e nella memoria di riapertura per account.
 - [x] Test del passaggio calendario 3 → 4 mantenendo manualmente 3; ritorno ad Automatica; selezioni non valide; salvataggio di una nota alla settimana 3 e conservazione delle bozze cambiando settimana. 125 test in 21 file superati e TypeScript superato.
+- [x] Candidata `7f628aae3bd7`: build web e iPhone firmata riuscite, firma verificata, lint 0 errori e 41 avvisi preesistenti. Codice su GitHub nel ramo di consolidamento; selettore non ancora installato né pubblicato sul sito.
 - [ ] Punti di rilascio ancora aperti: push server e conferma dal relativo avviso; accesso/export Lovable con backup/ripristino e migrazioni reali di sicurezza/capienza; riallineamento del sito; distribuzione TestFlight e collaudo reale offline/cambio account/prenotazioni. Timer e registrazione video esclusi dalla candidata per richiesta utente.
 - [ ] iPhone non disponibile al controllo del 3 ottobre; aggiornamento del selettore ancora da installare sul telefono.
 
